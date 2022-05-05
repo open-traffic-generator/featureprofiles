@@ -417,7 +417,7 @@ func TestStaticARP(t *testing.T) {
 }
 
 func TestUnsetDut(t *testing.T) {
-	t.Logf("Start Unsetting DUT Config")
+	t.Logf("Start removing DUT config")
 	dut := ondatra.DUT(t, "dut")
 	helpers.ConfigDUTs(map[string]string{dut.Name(): "unset_" + dut.Name() + ".txt"})
 }
