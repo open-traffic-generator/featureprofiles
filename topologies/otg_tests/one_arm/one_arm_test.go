@@ -1,4 +1,4 @@
-package tx_only_test
+package one_arm_test
 
 import (
 	"testing"
@@ -14,7 +14,7 @@ import (
 func TestMain(m *testing.M) {
 	fptest.RunTests(m)
 }
-func configureOTGTxOnly(t *testing.T, otg *otg.OTG) gosnappi.Config {
+func configureOTGOneArm(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	config := otg.NewConfig(t)
 	port1 := config.Ports().Add().SetName("port1")
 	flow := config.Flows().Add().SetName("f1")
@@ -53,10 +53,10 @@ func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config, expe
 	t.Logf("Port and Flow Metrics is Ok!!!")
 }
 
-func TestOTGTxOnly(t *testing.T) {
+func TestOTGOneArm(t *testing.T) {
 	ate := ondatra.ATE(t, "ate")
 	otg := ate.OTG()
-	otgConfig := configureOTGTxOnly(t, otg)
+	otgConfig := configureOTGOneArm(t, otg)
 
 	t.Logf("Setting config")
 	otg.PushConfig(t, otgConfig)
