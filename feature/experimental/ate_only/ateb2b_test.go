@@ -70,8 +70,8 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, allFlows []*ondatra.Flow)
 	ate.Traffic().Stop(t)
 
 	for _, flow := range allFlows {
-		t.Logf("%v tx packets %v", flow.Name(), ate.Telemetry().Flow(flow.Name()).Counters().OutPkts())
-		t.Logf("%v rx packets %v", flow.Name(), ate.Telemetry().Flow(flow.Name()).Counters().InPkts())
+		t.Logf("%v tx packets %v", flow.Name(), ate.Telemetry().Flow(flow.Name()).Counters().OutPkts().Get(t))
+		t.Logf("%v rx packets %v", flow.Name(), ate.Telemetry().Flow(flow.Name()).Counters().InPkts().Get(t))
 		lossPct := ate.Telemetry().Flow(flow.Name()).LossPct().Get(t)
 		if lossPct > 0 {
 			t.Errorf("Traffic Loss Pct for Flow: %s\n got %v, want 0", flow.Name(), lossPct)
