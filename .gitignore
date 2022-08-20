@@ -4,3 +4,4 @@ topologies/kne/testbed.kne.yml
 # used by `make validate_paths`
 openconfig_public/
 *.log
+feature/experimental/ate_only/ixnetwork*

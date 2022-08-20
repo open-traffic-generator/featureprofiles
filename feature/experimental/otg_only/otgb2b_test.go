@@ -1,4 +1,4 @@
-package one_arm_test
+package otg_b2b
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/open-traffic-generator/snappi/gosnappi"
 	"github.com/openconfig/featureprofiles/internal/fptest"
+	"github.com/openconfig/featureprofiles/internal/otgutils"
 	"github.com/openconfig/ondatra"
 	otg "github.com/openconfig/ondatra/otg"
 	otgtelemetry "github.com/openconfig/ondatra/telemetry/otg"
@@ -64,6 +65,7 @@ func TestOTGOneArm(t *testing.T) {
 	t.Logf("Starting traffic")
 	otg.StartTraffic(t)
 
+	otgutils.LogFlowMetrics(t, otg, otgConfig)
 	t.Logf("Verify traffic")
 	verifyTraffic(t, ate, otgConfig, 100)
 
