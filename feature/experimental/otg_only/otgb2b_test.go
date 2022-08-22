@@ -5,70 +5,125 @@ import (
 	"time"
 
 	"github.com/open-traffic-generator/snappi/gosnappi"
+	"github.com/openconfig/featureprofiles/internal/attrs"
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/otgutils"
 	"github.com/openconfig/ondatra"
 	otg "github.com/openconfig/ondatra/otg"
-	otgtelemetry "github.com/openconfig/ondatra/telemetry/otg"
+)
+
+var (
+	atePort1 = attrs.Attributes{
+		Name:    "atePort1",
+		MAC:     "02:00:01:01:01:01",
+		IPv4:    "192.0.2.2",
+		IPv6:    "2001:db8::192:0:2:2",
+		IPv4Len: 24,
+		IPv6Len: 126,
+	}
+
+	atePort2 = attrs.Attributes{
+		Name:    "atePort2",
+		MAC:     "02:00:02:01:01:01",
+		IPv4:    "192.0.2.1",
+		IPv6:    "2001:db8::192:0:2:1",
+		IPv4Len: 24,
+		IPv6Len: 126,
+	}
 )
 
 func TestMain(m *testing.M) {
 	fptest.RunTests(m)
 }
-func configureOTGOneArm(t *testing.T, otg *otg.OTG) gosnappi.Config {
-	config := otg.NewConfig(t)
-	port1 := config.Ports().Add().SetName("port1")
-	flow := config.Flows().Add().SetName("f1")
-	flow.Metrics().SetEnable(true)
-	flow.TxRx().SetChoice("port").Port().SetTxName(port1.Name())
-	flow.Duration().FixedPackets().SetPackets(100)
-	flow.Rate().SetPps(50)
-	eth := flow.Packet().Add().Ethernet()
-	eth.Dst().SetValue("00:AB:BC:AB:BC:AB")
-	eth.Src().SetValue("00:CD:DC:CD:DC:CD")
+func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
+	config := otg.NewConfig(t)
+	srcPort := config.Ports().Add().SetName("port1")
+	dstPort := config.Ports().Add().SetName("port2")
+
+	srcDev := config.Devices().Add().SetName(atePort1.Name)
+	srcEth := srcDev.Ethernets().Add().SetName(atePort1.Name + ".Eth")
+	srcEth.SetPortName(srcPort.Name()).SetMac(atePort1.MAC)
+	srcIpv4 := srcEth.Ipv4Addresses().Add().SetName(atePort1.Name + ".IPv4")
+	srcIpv4.SetAddress(atePort1.IPv4).SetGateway(atePort2.IPv4).SetPrefix(int32(atePort1.IPv4Len))
+	srcIpv6 := srcEth.Ipv6Addresses().Add().SetName(atePort1.Name + ".IPv6")
+	srcIpv6.SetAddress(atePort1.IPv6).SetGateway(atePort2.IPv6).SetPrefix(int32(atePort1.IPv6Len))
+
+	dstDev := config.Devices().Add().SetName(atePort2.Name)
+	dstEth := dstDev.Ethernets().Add().SetName(atePort2.Name + ".Eth")
+	dstEth.SetPortName(dstPort.Name()).SetMac(atePort2.MAC)
+	dstIpv4 := dstEth.Ipv4Addresses().Add().SetName(atePort2.Name + ".IPv4")
+	dstIpv4.SetAddress(atePort2.IPv4).SetGateway(atePort1.IPv4).SetPrefix(int32(atePort2.IPv4Len))
+	dstIpv6 := dstEth.Ipv6Addresses().Add().SetName(atePort2.Name + ".IPv6")
+	dstIpv6.SetAddress(atePort2.IPv6).SetGateway(atePort1.IPv6).SetPrefix(int32(atePort2.IPv6Len))
+
+	// ATE Traffic Configuration
+	flowipv4 := config.Flows().Add().SetName("Flow-IPv4")
+	flowipv4.Metrics().SetEnable(true)
+	flowipv4.TxRx().Device().
+		SetTxNames([]string{srcIpv4.Name()}).SetRxNames([]string{dstIpv4.Name()})
+	flowipv4.Size().SetFixed(512)
+	flowipv4.Rate().SetPercentage(1)
+	flowipv4.Duration().SetChoice("continuous")
+	e1 := flowipv4.Packet().Add().Ethernet()
+	e1.Src().SetValue(srcEth.Mac())
+	v4 := flowipv4.Packet().Add().Ipv4()
+	v4.Src().SetValue(srcIpv4.Address())
+	v4.Dst().SetValue(dstIpv4.Address())
+
+	flowipv6 := config.Flows().Add().SetName("Flow-IPv6")
+	flowipv6.Metrics().SetEnable(true)
+	flowipv6.TxRx().Device().
+		SetTxNames([]string{srcIpv6.Name()}).SetRxNames([]string{dstIpv6.Name()})
+	flowipv6.Size().SetFixed(512)
+	flowipv6.Rate().SetPercentage(1)
+	flowipv6.Duration().SetChoice("continuous")
+	e2 := flowipv6.Packet().Add().Ethernet()
+	e2.Src().SetValue(srcEth.Mac())
+	v6 := flowipv6.Packet().Add().Ipv6()
+	v6.Src().SetValue(srcIpv6.Address())
+	v6.Dst().SetValue(dstIpv6.Address())
+
+	t.Logf("Pushing config to ATE and starting protocols...")
 	otg.PushConfig(t, config)
+	otg.StartProtocols(t)
 	return config
 }
 
-func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config, expectedPacket uint64) {
+func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
+	time.Sleep(2 * time.Second)
+	trafficDuration := 10 * time.Second
 	otg := ate.OTG()
-	for _, p := range c.Ports().Items() {
-		_, ok := otg.Telemetry().Port(p.Name()).Counters().OutFrames().Watch(t, time.Minute, func(val *otgtelemetry.QualifiedUint64) bool {
-			return val.IsPresent() && val.Val(t) == expectedPacket
-		}).Await(t)
-		if !ok {
-			t.Logf("Expected Tx Packets :%v, Actual: %v", expectedPacket, otg.Telemetry().Port(p.Name()).Counters().OutFrames().Get(t))
-			t.Fatal("Expected Packet Mismatch!!!")
-		}
-	}
-	for _, f := range c.Flows().Items() {
-		_, ok := otg.Telemetry().Flow(f.Name()).Counters().OutPkts().Watch(t, time.Minute, func(val *otgtelemetry.QualifiedUint64) bool {
-			return val.IsPresent() && val.Val(t) == expectedPacket
-		}).Await(t)
-		if !ok {
-			t.Logf("Expected Tx Packets :%v, Actual: %v", expectedPacket, otg.Telemetry().Flow(f.Name()).Counters().OutPkts().Get(t))
-			t.Fatal("Expected Packet Mismatch!!!")
-		}
-	}
-	t.Logf("Port and Flow Metrics is Ok!!!")
-}
-
-func TestOTGOneArm(t *testing.T) {
-	ate := ondatra.ATE(t, "ate")
-	otg := ate.OTG()
-	otgConfig := configureOTGOneArm(t, otg)
-
-	t.Logf("Setting config")
-	otg.PushConfig(t, otgConfig)
-
 	t.Logf("Starting traffic")
 	otg.StartTraffic(t)
-
-	otgutils.LogFlowMetrics(t, otg, otgConfig)
-	t.Logf("Verify traffic")
-	verifyTraffic(t, ate, otgConfig, 100)
-
+	time.Sleep(trafficDuration)
 	t.Logf("Stop traffic")
 	otg.StopTraffic(t)
+	otgutils.LogFlowMetrics(t, otg, c)
+	for _, flow := range c.Flows().Items() {
+		t.Logf("Verifying flow metrics for flow %s\n", flow.Name())
+		recvMetric := otg.Telemetry().Flow(flow.Name()).Get(t)
+		txPackets := float32(recvMetric.GetCounters().GetOutPkts())
+		rxPackets := float32(recvMetric.GetCounters().GetInPkts())
+		lossPct := (txPackets - rxPackets) * 100 / txPackets
+		if lossPct > 0 {
+			t.Errorf("Traffic Loss Pct for Flow: %s\n got %v, want 0", flow.Name(), lossPct)
+		} else {
+			if txPackets > 0 {
+				t.Logf("Traffic for flow %s Passed!", flow.Name())
+			} else {
+				t.Errorf("Tx Packets for Flow: %s\n got %v, want >0", flow.Name(), txPackets)
+			}
+		}
+	}
+}
+
+func TestOTGb2b(t *testing.T) {
+	ate := ondatra.ATE(t, "ate")
+	otg := ate.OTG()
+	otgConfig := configureOTG(t, otg)
+
+	t.Logf("Verify traffic")
+	testTraffic(t, ate, otgConfig)
+
 }

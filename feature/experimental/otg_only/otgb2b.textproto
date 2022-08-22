@@ -2,7 +2,7 @@ name: "ixia-c-b2b"
 nodes: {
     name: "otg"
     type: IXIA_TG
-    version: "0.0.1-3027-local"
+    version: "0.0.1-3113"
     services: {
         key: 443
         value: {
