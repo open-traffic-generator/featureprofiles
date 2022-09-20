@@ -41,25 +41,25 @@ duts {
 
 ates {
   id: "ate"
-  name: "10.39.33.143"  # Change this to the Ixia chassis name.
+  name: "172.22.93.205"  # Change this to the Ixia-C-Controler hostname.
 
   # This option specific to OTG over Ixia-HW. 
   otg {
-    target: "172.26.21.122:40051" # Change this to the Ixia-c-grpc server endpoint.
+    target: "172.22.93.205:40051" # Change this to the Ixia-c-grpc server endpoint.
   }
 
   gnmi {
-    target: "172.26.21.122:50051"  # Change this to the Ixia-c-gnmi server endpoint.
+    target: "172.22.93.205:50051"  # Change this to the Ixia-c-gnmi server endpoint.
   }
 
   # Before this binding can be used with a topology, add ports mapping
   # from its topology ID to the actual port name on the device.
   ports {
     id: "port1"
-    name: "2/5"  # Change this to the actual port name.
+    name: "10.39.33.143;1;15"  # Change this to the ixia-c-hw port location.
   }
   ports {
     id: "port2"
-    name: "2/6"  # Change this to the actual port name.
+    name: "10.39.33.143;1;16"  # Change this to the ixia-c-hw port location.
   }
 }
