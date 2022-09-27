@@ -71,9 +71,11 @@ var (
 )
 
 const (
-	lagTypeLACP   = telemetry.IfAggregate_AggregationType_LACP
-	lagTypeSTATIC = telemetry.IfAggregate_AggregationType_STATIC
-	minLink       = 1
+	ethernetCsmacd = telemetry.IETFInterfaces_InterfaceType_ethernetCsmacd
+	ieee8023adLag  = telemetry.IETFInterfaces_InterfaceType_ieee8023adLag
+	lagTypeLACP    = telemetry.IfAggregate_AggregationType_LACP
+	lagTypeSTATIC  = telemetry.IfAggregate_AggregationType_STATIC
+	minLink        = 1
 )
 
 type testCase struct {
@@ -111,6 +113,7 @@ func (*testCase) configDUT(i *telemetry.Interface, a *attrs.Attributes) {
 
 func (tc *testCase) configAggregateDUT(i *telemetry.Interface, a *attrs.Attributes) {
 	tc.configDUT(i, a)
+	i.Type = ieee8023adLag
 	g := i.GetOrCreateAggregation()
 	g.LagType = tc.lagType
 	g.MinLinks = ygot.Uint16(tc.minlinks)
@@ -124,6 +127,7 @@ var portSpeed = map[ondatra.Speed]telemetry.E_IfEthernet_ETHERNET_SPEED{
 
 func (tc *testCase) configMemberDUT(i *telemetry.Interface, p *ondatra.Port) {
 	i.Description = ygot.String(p.String())
+	i.Type = ethernetCsmacd
 	if *deviations.InterfaceEnabled {
 		i.Enabled = ygot.Bool(true)
 	}
@@ -144,6 +148,7 @@ func (tc *testCase) setupAggregateAtomically(t *testing.T) {
 	for _, port := range tc.dutPorts {
 		i := d.GetOrCreateInterface(port.Name())
 		i.GetOrCreateEthernet().AggregateId = ygot.String(tc.aggID)
+		i.Type = ethernetCsmacd
 	}
 
 	p := tc.dut.Config()
@@ -185,6 +190,9 @@ func (tc *testCase) configureDUT(t *testing.T) {
 		lacpPath := d.Lacp().Interface(tc.aggID)
 		fptest.LogYgot(t, "LACP", lacpPath, lacp)
 		lacpPath.Replace(t, lacp)
+		t.Cleanup(func() {
+			lacpPath.Delete(t)
+		})
 	}
 
 	agg := &telemetry.Interface{Name: ygot.String(tc.aggID)}
@@ -192,13 +200,20 @@ func (tc *testCase) configureDUT(t *testing.T) {
 	aggPath := d.Interface(tc.aggID)
 	fptest.LogYgot(t, tc.aggID, aggPath, agg)
 	aggPath.Replace(t, agg)
+	t.Cleanup(func() {
+		aggPath.Delete(t)
+	})
 
 	for _, port := range tc.dutPorts {
-		i := &telemetry.Interface{Name: ygot.String(port.Name())}
+		iName := port.Name()
+		i := &telemetry.Interface{Name: ygot.String(iName)}
 		tc.configMemberDUT(i, port)
-		iPath := d.Interface(port.Name())
+		iPath := d.Interface(iName)
 		fptest.LogYgot(t, port.String(), iPath, i)
 		iPath.Replace(t, i)
+		t.Cleanup(func() {
+			iPath.Replace(t, &telemetry.Interface{Name: ygot.String(iName)})
+		})
 	}
 }
 
@@ -279,22 +294,24 @@ func TestGNMICombinedLACPSpeed(t *testing.T) {
 	ate := ondatra.ATE(t, "ate")
 
 	for _, lagType := range []telemetry.E_IfAggregate_AggregationType{lagTypeLACP, lagTypeSTATIC} {
-		top := ate.Topology().New()
-		tc := &testCase{
-			minlinks: minLink,
-			lagType:  lagType,
+		t.Run(lagType.String(), func(t *testing.T) {
+			top := ate.Topology().New()
+			tc := &testCase{
+				minlinks: minLink,
+				lagType:  lagType,
 
-			dut: dut,
-			ate: ate,
-			top: top,
+				dut: dut,
+				ate: ate,
+				top: top,
 
-			dutPorts: sortPorts(dut.Ports()),
-			atePorts: sortPorts(ate.Ports()),
-			aggID:    netutil.NextBundleInterface(t, dut),
-		}
-		tc.configureDUT(t)
-		tc.configureATE(t)
-		tc.verifyDUT(t, len(tc.dutPorts))
+				dutPorts: sortPorts(dut.Ports()),
+				atePorts: sortPorts(ate.Ports()),
+				aggID:    netutil.NextBundleInterface(t, dut),
+			}
+			tc.configureDUT(t)
+			tc.configureATE(t)
+			tc.verifyDUT(t, len(tc.dutPorts))
+		})
 	}
 }
 
@@ -304,37 +321,39 @@ func TestGNMIReducedLACPSpeed(t *testing.T) {
 	totalPort := len(ate.Ports())
 
 	for _, lagType := range []telemetry.E_IfAggregate_AggregationType{lagTypeLACP, lagTypeSTATIC} {
-		top := ate.Topology().New()
-		tc := &testCase{
-			minlinks: minLink,
-			lagType:  lagType,
-			dut:      dut,
-			ate:      ate,
-			top:      top,
+		t.Run(lagType.String(), func(t *testing.T) {
+			top := ate.Topology().New()
+			tc := &testCase{
+				minlinks: minLink,
+				lagType:  lagType,
+				dut:      dut,
+				ate:      ate,
+				top:      top,
 
-			dutPorts: sortPorts(dut.Ports()),
-			atePorts: sortPorts(ate.Ports()),
-			aggID:    netutil.NextBundleInterface(t, dut),
-		}
-		tc.configureDUT(t)
-		tc.configureATE(t)
-		for _, port := range tc.atePorts {
-			totalPort--
-			if totalPort < 1 {
-				break
+				dutPorts: sortPorts(dut.Ports()),
+				atePorts: sortPorts(ate.Ports()),
+				aggID:    netutil.NextBundleInterface(t, dut),
 			}
-			ate.Actions().NewSetPortState().WithPort(port).WithEnabled(false).Send(t)
-			time.Sleep(10 * time.Second)
-			tc.verifyDUT(t, totalPort)
-		}
-		for _, port := range tc.atePorts {
-			totalPort++
-			if totalPort > len(tc.atePorts)-1 {
-				break
+			tc.configureDUT(t)
+			tc.configureATE(t)
+			for _, port := range tc.atePorts {
+				totalPort--
+				if totalPort < 1 {
+					break
+				}
+				ate.Actions().NewSetPortState().WithPort(port).WithEnabled(false).Send(t)
+				time.Sleep(10 * time.Second)
+				tc.verifyDUT(t, totalPort)
 			}
-			ate.Actions().NewSetPortState().WithPort(port).WithEnabled(true).Send(t)
-			time.Sleep(10 * time.Second)
-			tc.verifyDUT(t, totalPort+1)
-		}
+			for _, port := range tc.atePorts {
+				totalPort++
+				if totalPort > len(tc.atePorts)-1 {
+					break
+				}
+				ate.Actions().NewSetPortState().WithPort(port).WithEnabled(true).Send(t)
+				time.Sleep(10 * time.Second)
+				tc.verifyDUT(t, totalPort+1)
+			}
+		})
 	}
 }
