@@ -48,13 +48,11 @@ func configureATE(t *testing.T, ate *ondatra.ATEDevice) []*ondatra.Flow {
 
 	ethHeader := ondatra.NewEthernetHeader()
 	ipv4Header := ondatra.NewIPv4Header()
-	ipv4Header.WithSrcAddress(atePort1.IPv4).WithDstAddress(atePort2.IPv4)
 	ipv6Header := ondatra.NewIPv6Header()
-	ipv6Header.WithSrcAddress(atePort1.IPv6).WithDstAddress(atePort2.IPv6)
 
 	flowipv4 := ate.Traffic().NewFlow("Flow-IPv4").WithSrcEndpoints(i1).WithDstEndpoints(i2).WithHeaders(ethHeader, ipv4Header)
 	flowipv4.WithFrameRatePct(1).WithFrameSizeRandom(100, 1000)
-	flowipv6 := ate.Traffic().NewFlow("Flow-IPv6").WithSrcEndpoints(i1).WithDstEndpoints(i2).WithHeaders(ethHeader, ipv4Header)
+	flowipv6 := ate.Traffic().NewFlow("Flow-IPv6").WithSrcEndpoints(i1).WithDstEndpoints(i2).WithHeaders(ethHeader, ipv6Header)
 	flowipv6.WithFrameRatePct(1).WithFrameSizeRandom(100, 1000)
 
 	return []*ondatra.Flow{flowipv4, flowipv6}
