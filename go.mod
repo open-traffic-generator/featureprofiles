@@ -1,6 +1,8 @@
 module github.com/openconfig/featureprofiles
 
-go 1.19
+go 1.18
+
+replace github.com/openconfig/ondatra => github.com/open-traffic-generator/ondatra v0.0.0-20221123072220-3105e846dff8
 
 require (
 	github.com/cisco-open/go-p4 v0.0.0-20220713162912-85fd0d484625
