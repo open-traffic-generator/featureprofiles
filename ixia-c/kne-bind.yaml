@@ -1,0 +1,5 @@
+username: admin
+password: admin
+topology: /home/c1/featureprofiles/ixia-c/topo.yaml
+cli: /home/c1/.ixops/kne/kne_cli/kne_cli
+
