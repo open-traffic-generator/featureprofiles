@@ -15,6 +15,7 @@
 package core_lldp_tlv_population_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -25,13 +26,23 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
+	otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
 	"github.com/openconfig/ondatra/otg"
+	"github.com/openconfig/ygnmi/ygnmi"
 )
 
 type lldpTestParameters struct {
 	SystemName string
 	MACAddress string
 	OtgName    string
+}
+
+type lldpNeighbors struct {
+	systemName    string
+	portId        string
+	portIdType    otgtelemetry.E_LldpNeighbor_PortIdType
+	chassisId     string
+	chassisIdType otgtelemetry.E_LldpNeighbor_ChassisIdType
 }
 
 const (
@@ -81,11 +92,6 @@ func TestCoreLLDPTLVPopulation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 
-			// ADHAR
-			t.Log("-------------LLDP-----------------------")
-			t.Log("LLDP")
-			t.Log("----------------------------------------")
-
 			// DUT configuration.
 			t.Log("Configure DUT.")
 			dut, dutConf := configureNode(t, "dut", test.lldpEnabled)
@@ -99,22 +105,32 @@ func TestCoreLLDPTLVPopulation(t *testing.T) {
 			otgConfig := configureATE(t, otg)
 			t.Log(otgConfig.ToJson())
 
-			t.Log("Waiting for 5 seconds.")
-			time.Sleep(time.Second * 5)
-
 			t.Log("Learned neighbors at DUT.")
 			verifyNodeConfig(t, dut, dutPort, dutConf, test.lldpEnabled)
 
-			t.Logf("ATE end statistics.")
-			otgutils.LogLLDPMetrics(t, otg, otgConfig)
-
-			t.Log("ATE learned info")
-			otgutils.LogLLDPNeighborStates(t, otg, otgConfig)
-
+			waitFor(func() bool { return checkOtgLldpMetrics(t, otg, otgConfig, test.lldpEnabled) }, t)
 			if test.lldpEnabled {
+				expOtgLldpNeighbors := map[string][]lldpNeighbors{
+					"ixia-otg": {
+						{
+							systemName:    dutConf.GetSystemName(),
+							portId:        dutPort.Name(),
+							portIdType:    otgtelemetry.LldpNeighbor_PortIdType_INTERFACE_NAME,
+							chassisId:     strings.ToUpper(dutConf.GetChassisId()),
+							chassisIdType: otgtelemetry.E_LldpNeighbor_ChassisIdType(dutConf.GetChassisIdType()),
+						},
+					},
+				}
+
+				waitFor(func() bool { return checkOtgLldpNeighbors(t, otg, otgConfig, expOtgLldpNeighbors) }, t)
 				//verifyNodeTelemetry(t, dut, ate, dutPort, atePort, test.lldpEnabled)
 				//verifyNodeTelemetry(t, ate, dut, atePort, dutPort, test.lldpEnabled)
 			} else {
+				expOtgLldpNeighbors := map[string][]lldpNeighbors{
+					"ixia-otg": {},
+				}
+
+				waitFor(func() bool { return checkOtgLldpNeighbors(t, otg, otgConfig, expOtgLldpNeighbors) }, t)
 				//verifyNodeTelemetry(t, dut, ate, dutPort, atePort, test.lldpEnabled)
 			}
 		})
@@ -138,14 +154,14 @@ func configureNode(t *testing.T, name string, lldpEnabled bool) (*ondatra.DUTDev
 
 func configureATE(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
-	// Device configuration + Ethernet configuration
+	// Device configuration + Ethernet configuration.
 	config := otg.NewConfig(t)
 	srcPort := config.Ports().Add().SetName(portName)
 	srcDev := config.Devices().Add().SetName(ateSrc.Name)
 	srcEth := srcDev.Ethernets().Add().SetName(ateSrc.Name + ".Eth")
 	srcEth.SetPortName(srcPort.Name()).SetMac(ateSrc.MAC)
 
-	// LLDP configuration
+	// LLDP configuration.
 	lldp := config.Lldp().Add()
 	lldp.SystemName().SetValue(lldpSrc.SystemName)
 	lldp.SetName(lldpSrc.OtgName)
@@ -156,8 +172,6 @@ func configureATE(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	otg.PushConfig(t, config)
 	otg.StartProtocols(t)
 
-	//fmt.Printf(retval_set_config)
-	//fmt.Printf(retval_push_config)
 	return config
 }
 
@@ -197,34 +211,31 @@ func verifyNodeConfig(t *testing.T, node gnmi.DeviceOrOpts, port *ondatra.Port, 
 // verifyNodeTelemetry verifies the telemetry values from the node such as port LLDP neighbor info.
 func verifyNodeTelemetry(t *testing.T, node, peer gnmi.DeviceOrOpts, nodePort, peerPort *ondatra.Port, lldpEnabled bool) {
 	t.Logf("Need to re-define this.")
-	//interfacePath := gnmi.OC().Lldp().Interface(nodePort.Name())
-	//println("Interface Path ----------")
-	//println(interfacePath)
-	//println("-------------------------")
+	interfacePath := gnmi.OC().Lldp().Interface(nodePort.Name())
 
 	// LLDP DisabledS
-	//lldpTelemetry := gnmi.Get(t, node, gnmi.OC().Lldp().Enabled().State())
-	//if lldpEnabled != lldpTelemetry {
-	//t.Errorf("LLDP enabled telemetry got: %t, want: %t.", lldpTelemetry, lldpEnabled)
-	//}
+	lldpTelemetry := gnmi.Get(t, node, gnmi.OC().Lldp().Enabled().State())
+	if lldpEnabled != lldpTelemetry {
+		t.Errorf("LLDP enabled telemetry got: %t, want: %t.", lldpTelemetry, lldpEnabled)
+	}
 
 	// Ensure that DUT does not generate any LLDP messages irrespective of the
 	// configuration of lldp/interfaces/interface/config/enabled (TRUE or FALSE)
 	// on any interface.
-	//var gotLen int
-	//if !lldpEnabled {
-	//	if _, ok := gnmi.Watch(t, node, interfacePath.State(), time.Minute, func(val *ygnmi.Value[*oc.Lldp_Interface]) bool {
-	//		intf, present := val.Val()
-	//		if !present {
-	//			return false
-	//		}
-	//		gotLen = len(intf.Neighbor)
-	//		return gotLen == 0
-	//	}).Await(t); !ok {
-	//		t.Errorf("Number of neighbors got: %d, want: 0.", gotLen)
-	//	}
-	//	return
-	//}
+	var gotLen int
+	if !lldpEnabled {
+		if _, ok := gnmi.Watch(t, node, interfacePath.State(), time.Minute, func(val *ygnmi.Value[*oc.Lldp_Interface]) bool {
+			intf, present := val.Val()
+			if !present {
+				return false
+			}
+			gotLen = len(intf.Neighbor)
+			return gotLen == 0
+		}).Await(t); !ok {
+			t.Errorf("Number of neighbors got: %d, want: 0.", gotLen)
+		}
+		return
+	}
 
 	// LLDP Enabled
 	// Get the LLDP state of the peer.
@@ -268,4 +279,85 @@ func verifyNodeTelemetry(t *testing.T, node, peer gnmi.DeviceOrOpts, nodePort, p
 	// ADHAR
 
 	//confirm.State(t, wantNbrState, gotNbrState)
+}
+
+func waitFor(fn func() bool, t testing.TB) {
+	start := time.Now()
+	for {
+		done := fn()
+		if done {
+			t.Logf("Expected BGP Prefix received")
+			break
+		}
+		if time.Since(start) > 10*time.Second {
+			t.Errorf("Timeout while waiting for expected stats...")
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+// checkOtgLldpMetrics verifies OTG side lldp Metrics values based on DUT side lldp is enabled or not
+func checkOtgLldpMetrics(t *testing.T, otg *otg.OTG, c gosnappi.Config, lldpEnabled bool) bool {
+	otgutils.LogLLDPMetrics(t, otg, c)
+	for _, lldp := range c.Lldp().Items() {
+		lldpName := lldp.Name()
+		lldpState := gnmi.Get(t, otg, gnmi.OTG().LldpInterface(lldpName).State())
+		lldpStateCounters := lldpState.GetCounters()
+
+		if lldpStateCounters.GetFrameOut() == 0 {
+			return false
+		}
+
+		if lldpEnabled {
+			if lldpStateCounters.GetFrameIn() == 0 {
+				return false
+			}
+		} else {
+			if lldpStateCounters.GetFrameIn() != 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// checkOtgLldpMetrics verifies OTG side lldp neighbor states
+func checkOtgLldpNeighbors(t *testing.T, otg *otg.OTG, c gosnappi.Config, expLldpNeighbors map[string][]lldpNeighbors) bool {
+	otgutils.LogLLDPNeighborStates(t, otg, c)
+
+	for lldp, lldpNeighbors := range expLldpNeighbors {
+		lldpState := gnmi.Get(t, otg, gnmi.OTG().LldpInterface(lldp).State())
+
+		if len(lldpNeighbors) == 0 {
+			if lldpState.LldpNeighborDatabase != nil {
+				return false
+			}
+		} else {
+			neighbors := lldpState.GetLldpNeighborDatabase().LldpNeighbor
+			for _, lldpNeighbor := range lldpNeighbors {
+				neighborFound := false
+				for _, neighbor := range neighbors {
+					if neighbor.GetChassisId() == lldpNeighbor.chassisId {
+						if neighbor.GetChassisIdType() == lldpNeighbor.chassisIdType {
+							if neighbor.GetPortId() == lldpNeighbor.portId {
+								if neighbor.GetPortIdType() == lldpNeighbor.portIdType {
+									if neighbor.GetSystemName() == lldpNeighbor.systemName {
+										neighborFound = true
+										break
+									}
+								}
+							}
+						}
+					}
+				}
+
+				if !neighborFound {
+					return false
+				}
+			}
+		}
+
+	}
+	return true
 }
