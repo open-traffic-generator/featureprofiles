@@ -219,12 +219,12 @@ func waitFor(fn func() bool, t testing.TB) {
 	for {
 		done := fn()
 		if done {
-			t.Logf("Expected BGP Prefix received")
+			t.Logf("Expected LLDP Prefix received")
 			break
 		}
-		if time.Since(start) > 10*time.Second {
+		if time.Since(start) > 65*time.Second {
 			t.Errorf("Timeout while waiting for expected stats...")
-			break
+			t.Error("Test failed Packet not received")
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
