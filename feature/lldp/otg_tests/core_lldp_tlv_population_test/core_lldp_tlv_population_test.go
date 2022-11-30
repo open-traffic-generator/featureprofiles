@@ -216,6 +216,7 @@ func verifyNodeConfig(t *testing.T, node gnmi.DeviceOrOpts, port *ondatra.Port, 
 
 func waitFor(fn func() bool, t testing.TB) {
 	start := time.Now()
+	//statmatched := true
 	for {
 		done := fn()
 		if done {
@@ -224,10 +225,12 @@ func waitFor(fn func() bool, t testing.TB) {
 		}
 		if time.Since(start) > 65*time.Second {
 			t.Errorf("Timeout while waiting for expected stats...")
-			t.Error("Test failed Packet not received")
+			//statmatched = false
+			break
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+	//return statmatched
 }
 
 // checkOtgLldpMetrics verifies OTG side lldp Metrics values based on DUT side lldp is enabled or not
