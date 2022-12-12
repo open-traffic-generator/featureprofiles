@@ -6,12 +6,7 @@
 # the repo. Unless a later match takes precedence,
 # @openconfig/featureprofiles-maintainers will be requested for
 # review when someone opens a pull request.
-*       @openconfig/featureprofiles-maintainers
+*       @openconfig/featureprofiles-maintainers @openconfig/featureprofiles-quattro
 
 # Order is important; the last matching pattern takes the most
 # precedence.
-
-# When someone opens a pull request that only modifies Go files, only
-# @openconfig/featureprofiles-go-reviewers and not the global
-# owner(s) will be requested for a review.
-*.go    @openconfig/featureprofiles-go-reviewers
