@@ -120,7 +120,7 @@ func (*testCase) configSrcDUT(i *oc.Interface, a *attrs.Attributes) {
 
 	s := i.GetOrCreateSubinterface(0)
 	s4 := s.GetOrCreateIpv4()
-	if *deviations.InterfaceEnabled {
+	if *deviations.InterfaceEnabled && !*deviations.IPv4MissingEnabled {
 		s4.Enabled = ygot.Bool(true)
 	}
 	a4 := s4.GetOrCreateAddress(a.IPv4)
@@ -225,6 +225,11 @@ func (tc *testCase) configureDUT(t *testing.T) {
 	fptest.LogQuery(t, srcp.String(), srciPath.Config(), srci)
 	gnmi.Replace(t, tc.dut, srciPath.Config(), srci)
 
+	if *deviations.ExplicitInterfaceInDefaultVRF {
+		fptest.AssignToNetworkInstance(t, tc.dut, tc.aggID, *deviations.DefaultNetworkInstance, 0)
+		fptest.AssignToNetworkInstance(t, tc.dut, srcp.Name(), *deviations.DefaultNetworkInstance, 0)
+	}
+
 	for _, port := range tc.dutPorts[1:] {
 		i := &oc.Interface{Name: ygot.String(port.Name())}
 		i.Type = ethernetCsmacd
@@ -236,6 +241,11 @@ func (tc *testCase) configureDUT(t *testing.T) {
 		iPath := d.Interface(port.Name())
 		fptest.LogQuery(t, port.String(), iPath.Config(), i)
 		gnmi.Replace(t, tc.dut, iPath.Config(), i)
+	}
+	if *deviations.ExplicitPortSpeed {
+		for _, port := range tc.dutPorts {
+			fptest.SetPortSpeed(t, port)
+		}
 	}
 }
 

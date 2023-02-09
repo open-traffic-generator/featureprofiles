@@ -62,9 +62,9 @@ const (
 	IPBlock1      = "198.18.0.1/18"   // IPBlock1 represents the ipv4 entries in VRF1
 	IPBlock2      = "198.18.64.1/18"  // IPBlock2 represents the ipv4 entries in VRF2
 	IPBlock3      = "198.18.128.1/18" // IPBlock3 represents the ipv4 entries in VRF3
-	nhID1         = 2                 // nhID1 is the starting nh Index for entries in VRF1
-	nhID2         = 1002              // nhID2 is the starting nh Index for entries in VRF2
-	nhID3         = 18502             // nhID3 is the starting nh Index for entries in VRF3
+	nhID1         = 65                // nhID1 is the starting nh index for entries in VRF1
+	nhID2         = 1065              // nhID2 is the starting nh index for entries in VRF2
+	nhID3         = 18565             // nhID3 is the starting nh index for entries in VRF3
 	tunnelSrcIP   = "198.18.204.1"    // tunnelSrcIP represents Source IP of IPinIP Tunnel
 	tunnelDstIP   = "198.18.208.1"    // tunnelDstIP represents Dest IP of IPinIP Tunnel
 )
@@ -297,11 +297,6 @@ func createVrf(t *testing.T, dut *ondatra.DUTDevice, d *oc.Root, vrfs []string) 
 		if vrf != *deviations.DefaultNetworkInstance {
 			i := d.GetOrCreateNetworkInstance(vrf)
 			i.Type = oc.NetworkInstanceTypes_NETWORK_INSTANCE_TYPE_L3VRF
-			i.Enabled = ygot.Bool(true)
-			i.EnabledAddressFamilies = []oc.E_Types_ADDRESS_FAMILY{
-				oc.Types_ADDRESS_FAMILY_IPV4,
-				oc.Types_ADDRESS_FAMILY_IPV6,
-			}
 			i.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, *deviations.StaticProtocolName)
 			gnmi.Replace(t, dut, gnmi.OC().NetworkInstance(vrf).Config(), i)
 			nip := gnmi.OC().NetworkInstance(vrf)
@@ -318,6 +313,12 @@ func pushConfig(t *testing.T, dut *ondatra.DUTDevice, dutPort *ondatra.Port, d *
 	iname := dutPort.Name()
 	i := d.GetOrCreateInterface(iname)
 	gnmi.Replace(t, dut, gnmi.OC().Interface(iname).Config(), i)
+	if *deviations.ExplicitPortSpeed {
+		fptest.SetPortSpeed(t, dutPort)
+	}
+	if *deviations.ExplicitInterfaceInDefaultVRF {
+		fptest.AssignToNetworkInstance(t, dut, i.GetName(), *deviations.DefaultNetworkInstance, 0)
+	}
 }
 
 // configureInterfaceDUT configures a single DUT layer 2 port.
@@ -341,6 +342,11 @@ func generateSubIntfPair(t *testing.T, dut *ondatra.DUTDevice, dutPort *ondatra.
 	nextHopCount := 63 // nextHopCount specifies number of nextHop IPs needed.
 	for i := 0; i <= nextHopCount; i++ {
 		vlanID := uint16(i)
+		// As per yang model, valid vlan range is 1-4094 - https://github.com/openconfig/public/blob/b34db05e8cf2efe69df3762d4bbd80665e1f9e79/release/models/vlan/openconfig-vlan-types.yang#L133
+		// Without below deviation, vlan-id 0 is being used for subinterface 0. The deviation is to start with valid vlan-id of 1 for subinterface 0.
+		if *deviations.NoMixOfTaggedAndUntaggedSubinterfaces {
+			vlanID = uint16(i) + 1
+		}
 		name := fmt.Sprintf(`dst%d`, i)
 		Index := uint32(i)
 		ateIPv4 := fmt.Sprintf(`198.51.100.%d`, ((4 * i) + 1))
@@ -360,7 +366,6 @@ func configureSubinterfaceDUT(t *testing.T, d *oc.Root, dutPort *ondatra.Port, i
 	if vrf != "" {
 		t.Logf("Put port %s into vrf %s", dutPort.Name(), vrf)
 		d.GetOrCreateNetworkInstance(vrf).GetOrCreateInterface(dutPort.Name())
-		d.GetOrCreateNetworkInstance(vrf).EnabledAddressFamilies = []oc.E_Types_ADDRESS_FAMILY{oc.Types_ADDRESS_FAMILY_IPV4}
 	}
 
 	i := d.GetOrCreateInterface(dutPort.Name())
@@ -375,7 +380,7 @@ func configureSubinterfaceDUT(t *testing.T, d *oc.Root, dutPort *ondatra.Port, i
 
 	sipv4 := s.GetOrCreateIpv4()
 
-	if *deviations.InterfaceEnabled {
+	if *deviations.InterfaceEnabled && !*deviations.IPv4MissingEnabled {
 		sipv4.Enabled = ygot.Bool(true)
 	}
 
@@ -424,6 +429,8 @@ func TestScaling(t *testing.T) {
 	ap1 := ate.Port(t, "port1")
 	top := ate.Topology().New()
 	vrfs := []string{*deviations.DefaultNetworkInstance, vrf1, vrf2, vrf3}
+	dutConfNIPath := gnmi.OC().NetworkInstance(*deviations.DefaultNetworkInstance)
+	gnmi.Replace(t, dut, dutConfNIPath.Type().Config(), oc.NetworkInstanceTypes_NETWORK_INSTANCE_TYPE_DEFAULT_INSTANCE)
 	createVrf(t, dut, d, vrfs)
 	// configure an L3 subinterface of no vlan tagging under DUT port#1
 	configureSubinterfaceDUT(t, d, dp1, 0, 0, dutPort1.IPv4, vrf1)
