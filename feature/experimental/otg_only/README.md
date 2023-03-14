@@ -6,7 +6,7 @@ cat >testbed.kne.yml << EOF
 username: admin
 password: admin
 topology: $PWD/otgb2b.textproto
-cli: $HOME/go/bin/kne_cli
+cli: /usr/local/bin/kne
 EOF
 
 4. go test -v otgb2b_test.go -kne-config testbed.kne.yml -testbed otgb2b.testbed

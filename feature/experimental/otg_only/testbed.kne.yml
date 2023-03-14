@@ -1,4 +1,4 @@
 username: admin
 password: admin
 topology: /home/opetre/featureprofiles/feature/experimental/otg_only/otgb2b.textproto
-cli: /home/opetre/go/bin/kne_cli
+cli: /usr/local/bin/kne
