@@ -100,6 +100,7 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	time.Sleep(trafficDuration)
 	t.Logf("Stop traffic")
 	otg.StopTraffic(t)
+	time.Sleep(5 * time.Second)
 	otgutils.LogPortMetrics(t, otg, c)
 	otgutils.LogFlowMetrics(t, otg, c)
 	for _, flow := range c.Flows().Items() {
