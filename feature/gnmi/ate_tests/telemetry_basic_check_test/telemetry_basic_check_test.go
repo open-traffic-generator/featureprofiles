@@ -145,10 +145,10 @@ func TestInterfaceOperStatus(t *testing.T) {
 }
 
 func TestInterfacePhysicalChannel(t *testing.T) {
-	if *deviations.MissingInterfacePhysicalChannel {
+	dut := ondatra.DUT(t, "dut")
+	if deviations.MissingInterfacePhysicalChannel(dut) {
 		t.Skip("Test is skipped due to MissingInterfacePhysicalChannel deviation")
 	}
-	dut := ondatra.DUT(t, "dut")
 	dp := dut.Port(t, "port1")
 
 	phyChannel := gnmi.Get(t, dut, gnmi.OC().Interface(dp.Name()).PhysicalChannel().State())
@@ -205,9 +205,6 @@ func TestInterfaceStatusChange(t *testing.T) {
 }
 
 func TestHardwarePort(t *testing.T) {
-	if *deviations.MissingInterfaceHardwarePort {
-		t.Skip("Test is skipped due to MissingInterfaceHardwarePort deviation")
-	}
 	dut := ondatra.DUT(t, "dut")
 	dp := dut.Port(t, "port1")
 
@@ -330,7 +327,7 @@ func TestQoSCounters(t *testing.T) {
 		path:     qosQueuePath + "dropped-pkts",
 		counters: gnmi.LookupAll(t, dut, queues.DroppedPkts().State()),
 	}}
-	if !*deviations.QOSDroppedOctets {
+	if !deviations.QOSDroppedOctets(dut) {
 		cases = append(cases,
 			struct {
 				desc     string
@@ -449,6 +446,11 @@ func TestComponentParent(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
+
+			if len(compList[tc.desc]) == 0 && dut.Model() == "DCS-7280CR3K-32D4" {
+				t.Skipf("Test of %v is skipped due to hardware platform compatibility", tc.componentType)
+			}
+
 			t.Logf("Found component list for type %v : %v", tc.componentType, compList[tc.desc])
 			if len(compList[tc.desc]) == 0 {
 				t.Fatalf("Get component list for %q: got 0, want > 0", dut.Model())
@@ -496,10 +498,20 @@ func TestSoftwareVersion(t *testing.T) {
 		parent := gnmi.Lookup(t, dut, gnmi.OC().Component(os).Parent().State())
 		if v, ok := parent.Val(); ok {
 			got := gnmi.Get(t, dut, gnmi.OC().Component(v).Type().State())
-			if got == supervisorType {
-				t.Logf("Got a valid parent %v with a type %v for the component %v", v, got, os)
+
+			// Arista_7280 OC component EOS has parent type Chassis
+			if dut.Model() == "DCS-7280CR3K-32D4" {
+				if got == chassisType {
+					t.Logf("Got a valid parent %v with a type %v for the component %v", v, got, os)
+				} else {
+					t.Errorf("Got a parent %v with a type %v for the component %v, want %v", v, got, os, chassisType)
+				}
 			} else {
-				t.Errorf("Got a parent %v with a type %v for the component %v, want %v", v, got, os, supervisorType)
+				if got == supervisorType {
+					t.Logf("Got a valid parent %v with a type %v for the component %v", v, got, os)
+				} else {
+					t.Errorf("Got a parent %v with a type %v for the component %v, want %v", v, got, os, supervisorType)
+				}
 			}
 		} else {
 			t.Errorf("Parent for the component %v was not found", os)
@@ -519,14 +531,10 @@ func TestCPU(t *testing.T) {
 	for _, cpu := range cpus {
 		t.Logf("Validate CPU: %s", cpu)
 		component := gnmi.OC().Component(cpu)
-		if !*deviations.MissingCPUMfgName {
-			if !gnmi.Lookup(t, dut, component.MfgName().State()).IsPresent() {
-				t.Errorf("component.MfgName().Lookup(t).IsPresent() for %q: got false, want true", cpu)
-			} else {
-				t.Logf("CPU %s MfgName: %s", cpu, gnmi.Get(t, dut, component.MfgName().State()))
-			}
+		if !gnmi.Lookup(t, dut, component.MfgName().State()).IsPresent() {
+			t.Errorf("component.MfgName().Lookup(t).IsPresent() for %q: got false, want true", cpu)
 		} else {
-			t.Logf("Check MfgName for CPU %s is skipped due to MissingCPUMfgName deviation", cpu)
+			t.Logf("CPU %s MfgName: %s", cpu, gnmi.Get(t, dut, component.MfgName().State()))
 		}
 		if !gnmi.Lookup(t, dut, component.Description().State()).IsPresent() {
 			t.Errorf("component.Description().Lookup(t).IsPresent() for %q: got false, want true", cpu)
@@ -538,6 +546,10 @@ func TestCPU(t *testing.T) {
 
 func TestSupervisorLastRebootInfo(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
+
+	if dut.Model() == "DCS-7280CR3K-32D4" {
+		t.Skipf("Test is skipped due to hardware platform compatibility")
+	}
 
 	cards := components.FindComponentsByType(t, dut, supervisorType)
 	t.Logf("Found card list: %v", cards)
