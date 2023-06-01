@@ -72,7 +72,7 @@ import (
 	"github.com/openconfig/ondatra"
 )
 
-// lookupDutDeviations returns the deviations for the specified dut. If no duts match `nil` is returned.
+// lookupDutDeviations returns the deviations for the specified dut.
 func lookupDUTDeviations(dut *ondatra.DUTDevice) *mpb.Metadata_Deviations {
 	for _, platformExceptions := range metadata.Get().PlatformExceptions {
 		if dut.Device.Vendor().String() != platformExceptions.GetPlatform().Vendor.String() {
@@ -85,7 +85,7 @@ func lookupDUTDeviations(dut *ondatra.DUTDevice) *mpb.Metadata_Deviations {
 		}
 	}
 	log.Warningf("No platform exceptions for dut platform %v or model %v configured in platform exceptions metadata %v", dut.Device.Vendor().String(), dut.Device.Model(), metadata.Get().PlatformExceptions)
-	return nil
+	return &mpb.Metadata_Deviations{}
 }
 
 func logErrorIfFlagSet(name string) {
@@ -127,11 +127,6 @@ func DefaultNetworkInstance(_ *ondatra.DUTDevice) string {
 // P4RTMissingDelete returns whether the device does not support delete mode in P4RT write requests.
 func P4RTMissingDelete(_ *ondatra.DUTDevice) bool {
 	return *p4rtMissingDelete
-}
-
-// P4RTUnsetElectionIDUnsupported returns whether the device does not support unset election ID.
-func P4RTUnsetElectionIDUnsupported(_ *ondatra.DUTDevice) bool {
-	return *p4rtUnsetElectionIDUnsupported
 }
 
 // P4rtUnsetElectionIDPrimaryAllowed returns whether the device does not support unset election ID.
@@ -277,8 +272,14 @@ func SwVersionUnsupported(_ *ondatra.DUTDevice) bool {
 }
 
 // HierarchicalWeightResolutionTolerance returns the allowed tolerance for BGP traffic flow while comparing for pass or fail conditions.
-func HierarchicalWeightResolutionTolerance(_ *ondatra.DUTDevice) float64 {
-	return *hierarchicalWeightResolutionTolerance
+// Default minimum value is 0.2. Anything less than 0.2 will be set to 0.2.
+func HierarchicalWeightResolutionTolerance(dut *ondatra.DUTDevice) float64 {
+	logErrorIfFlagSet("deviation_hierarchical_weight_resolution_tolerance")
+	hwrt := lookupDUTDeviations(dut).GetHierarchicalWeightResolutionTolerance()
+	if minHWRT := 0.2; hwrt < minHWRT {
+		return minHWRT
+	}
+	return hwrt
 }
 
 // InterfaceEnabled returns if device requires interface enabled leaf booleans to be explicitly set to true.
@@ -475,6 +476,11 @@ func InterfaceRefConfigUnsupported(_ *ondatra.DUTDevice) bool {
 	return *interfaceRefConfigUnsupported
 }
 
+// StorageComponentUnsupported returns if telemetry path /components/component/storage is not supported.
+func StorageComponentUnsupported(_ *ondatra.DUTDevice) bool {
+	return *storageComponentUnsupported
+}
+
 // Vendor deviation flags.
 // All new flags should not be exported (define them in lowercase) and accessed
 // from tests through a public accessors like those above.
@@ -582,13 +588,12 @@ var (
 
 	p4rtMissingDelete = flag.Bool("deviation_p4rt_missing_delete", false, "Device does not support delete mode in P4RT write requests")
 
-	p4rtUnsetElectionIDUnsupported = flag.Bool("deviation_p4rt_unsetelectionid_unsupported", false, "Device does not support unset Election ID")
+	networkInstanceTableDeletionRequired = flag.Bool("deviation_network_instance_table_deletion_required", false,
+		"Set to true for device requiring explicit deletion of network-instance table, default is false")
 
 	p4rtUnsetElectionIDPrimaryAllowed = flag.Bool("deviation_p4rt_unsetelectionid_primary_allowed", false, "Device allows unset Election ID to be primary")
 
 	p4rtBackupArbitrationResponseCode = flag.Bool("deviation_bkup_arbitration_resp_code", false, "Device sets ALREADY_EXISTS status code for all backup client responses")
-
-	networkInstanceTableDeletionRequired = flag.Bool("deviation_network_instance_table_deletion_required", false, "Set to true for device requiring explicit deletion of network-instance table, default is false")
 
 	isisMultiTopologyUnsupported = flag.Bool("deviation_isis_multi_topology_unsupported", false,
 		"Device skip isis multi-topology check if value is true, Default value is false")
@@ -636,7 +641,7 @@ var (
 
 	swVersionUnsupported = flag.Bool("deviation_sw_version_unsupported", false, "Device does not support reporting software version according to the requirements in gNMI-1.10.")
 
-	hierarchicalWeightResolutionTolerance = flag.Float64("deviation_hierarchical_weight_resolution_tolerance", 0.2, "Set it to expected ucmp traffic tolerance, default is 0.2")
+	_ = flag.Float64("deviation_hierarchical_weight_resolution_tolerance", 0.2, "Set it to expected ucmp traffic tolerance, default is 0.2")
 
 	secondaryBackupPathTrafficFailover = flag.Bool("deviation_secondary_backup_path_traffic_failover", false, "Device does not support traffic forward with secondary backup path failover")
 
@@ -645,4 +650,6 @@ var (
 	routePolicyUnderAFIUnsupported = flag.Bool("deviation_route_policy_under_afi_unsupported", false, "Set true for device that does not support route-policy under AFI/SAFI, default is false")
 
 	interfaceRefConfigUnsupported = flag.Bool("deviation_interface_ref_config_unsupported", false, "Device does not support interface-ref configuration when applying features to interface")
+
+	storageComponentUnsupported = flag.Bool("deviation_storage_component_unsupported", false, "Set to true for device that does not support telemetry path /components/component/storage")
 )
