@@ -34,7 +34,7 @@ message Metadata {
     TESTBED_DUT_DUT_4LINKS = 2;
     TESTBED_DUT_ATE_2LINKS = 3;
     TESTBED_DUT_ATE_4LINKS = 4;
-    TESTBED_DUT_ATE_9LINKS = 5;
+    TESTBED_DUT_ATE_9LINKS_LAG = 5;
   }
   // Testbed on which the test is intended to run.
   Testbed testbed = 4;
@@ -162,6 +162,15 @@ message Metadata {
     bool storage_component_unsupported = 39;
     // Device requires gribi-protocol to be enabled under network-instance.
     bool explicit_gribi_under_network_instance = 40;
+    // Device requires port-speed to be set because its default value may not be
+    // usable.
+    bool explicit_port_speed = 41;
+    // Device requires explicit attachment of an interface or subinterface to
+    // the default network instance.
+    // Nokia: partnerissuetracker.corp.google.com/260928639
+    bool explicit_interface_in_default_vrf = 42;
+    // Set to true to skip checking QOS Dropped octets stats for interface.
+    bool qos_dropped_octets = 43;
   }
 
   message PlatformExceptions {
