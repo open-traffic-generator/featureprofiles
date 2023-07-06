@@ -41,6 +41,10 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	config := otg.NewConfig(t)
 	srcPort := config.Ports().Add().SetName("port1")
 	dstPort := config.Ports().Add().SetName("port2")
+	// config.Captures().Add().
+	// 	SetName("otg_cap").
+	// 	SetPortNames([]string{dstPort.Name()}).
+	// 	SetFormat(gosnappi.CaptureFormat.PCAP)
 
 	srcDev := config.Devices().Add().SetName(atePort1.Name)
 	srcEth := srcDev.Ethernets().Add().SetName(atePort1.Name + ".Eth").SetMac(atePort1.MAC)
@@ -93,8 +97,13 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
 func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	time.Sleep(2 * time.Second)
-	trafficDuration := 10 * time.Second
+	trafficDuration := 2 * time.Second
 	otg := ate.OTG()
+	// capture
+	// cs := gosnappi.NewControlState()
+	// cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.START)
+	// otg.SetControlState(t, cs)
+
 	t.Logf("Starting traffic")
 	otg.StartTraffic(t)
 	time.Sleep(trafficDuration)
@@ -103,6 +112,20 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	time.Sleep(5 * time.Second)
 	otgutils.LogPortMetrics(t, otg, c)
 	otgutils.LogFlowMetrics(t, otg, c)
+
+	// bytes := otg.GetCapture(t, gosnappi.NewCaptureRequest().SetPortName(c.Ports().Items()[1].Name()))
+	// // time.Sleep(20 * time.Second)
+	// f, err := os.CreateTemp(".", "pcap")
+	// if err != nil {
+	// 	t.Fatalf("ERROR: Could not create temporary pcap file: %v\n", err)
+	// }
+	// defer os.Remove(f.Name())
+
+	// if _, err := f.Write(bytes); err != nil {
+	// 	t.Fatalf("ERROR: Could not write bytes to pcap file: %v\n", err)
+	// }
+	// f.Close()
+
 	for _, flow := range c.Flows().Items() {
 		t.Logf("Verifying flow metrics for flow %s\n", flow.Name())
 		txPackets := float32(gnmi.Get(t, otg, gnmi.OTG().Flow(flow.Name()).Counters().OutPkts().State()))
