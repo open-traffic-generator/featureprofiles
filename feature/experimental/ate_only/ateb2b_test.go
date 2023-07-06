@@ -45,7 +45,9 @@ func configureATE(t *testing.T, ate *ondatra.ATEDevice) []*ondatra.Flow {
 	i2.IPv4().WithAddress(atePort2.IPv4CIDR()).WithDefaultGateway(atePort1.IPv4)
 	i2.IPv6().WithAddress(atePort2.IPv6CIDR()).WithDefaultGateway(atePort1.IPv6)
 
-	top.Push(t).StartProtocols(t)
+	top.Push(t)
+	time.Sleep(10 * time.Second)
+	top.StartProtocols(t)
 
 	ethHeader := ondatra.NewEthernetHeader()
 	ipv4Header := ondatra.NewIPv4Header()
