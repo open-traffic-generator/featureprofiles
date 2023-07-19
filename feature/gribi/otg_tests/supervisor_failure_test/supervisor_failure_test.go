@@ -236,7 +236,7 @@ func validateTelemetry(t *testing.T, dut *ondatra.DUTDevice, primaryAfterSwitch 
 		t.Logf("Found lastSwitchoverReason.GetTrigger().String(): %v", lastSwitchoverReason.GetTrigger().String())
 	}
 	wantTrigger := switchTrigger
-	if deviations.SwitchControlProcessorSystemInitiated(dut) {
+	if deviations.GNOISwitchoverReasonMissingUserInitiated(dut) {
 		wantTrigger = oc.PlatformTypes_ComponentRedundantRoleSwitchoverReasonTrigger_SYSTEM_INITIATED
 	}
 	if got, want := gnmi.Get(t, dut, primary.LastSwitchoverReason().State()).GetTrigger(), wantTrigger; got != want {
@@ -376,7 +376,12 @@ func TestSupFailure(t *testing.T) {
 	// Verify the entry for 203.0.113.0/24 is active through AFT Telemetry.
 	t.Logf("Verify the entry for %s is active through AFT Telemetry.", ateDstNetCIDR)
 	ipv4Path := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Afts().Ipv4Entry(ateDstNetCIDR)
-	gnmi.Await(t, args.dut, ipv4Path.Prefix().State(), 2*time.Minute, ateDstNetCIDR)
+	if _, found := gnmi.Watch(t, args.dut, ipv4Path.State(), 2*time.Minute, func(val *ygnmi.Value[*oc.NetworkInstance_Afts_Ipv4Entry]) bool {
+		value, present := val.Val()
+		return present && value.GetPrefix() != ateDstNetCIDR
+	}).Await(t); !found {
+		t.Fatalf("Could not find prefix %s in telemetry AFT", ateDstNetCIDR)
+	}
 	t.Logf("ipv4-entry found for %s after controller switchover..", ateDstNetCIDR)
 
 	otgutils.LogFlowMetrics(t, ate.OTG(), top)
