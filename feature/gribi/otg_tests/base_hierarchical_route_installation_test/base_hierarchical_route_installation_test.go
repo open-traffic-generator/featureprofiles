@@ -265,7 +265,7 @@ func ValidateTraffic(t *testing.T, ate *ondatra.ATEDevice, flow gosnappi.Flow, f
 	if txPkts == 0 {
 		t.Fatalf("Tx packets should be higher than 0")
 	}
-	lossPct := (txPkts - rxPkts) * 100 / txPkts
+	lossPct := float32((txPkts-rxPkts)*100) / float32(txPkts)
 	if int(lossPct) == 0 && flowFilter != "" {
 		etPath := gnmi.OTG().Flow(flow.Name()).TaggedMetricAny()
 		ets := gnmi.GetAll(t, ate.OTG(), etPath.State())
