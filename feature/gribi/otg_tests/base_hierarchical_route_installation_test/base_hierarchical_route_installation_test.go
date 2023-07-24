@@ -259,6 +259,7 @@ func ValidateTraffic(t *testing.T, ate *ondatra.ATEDevice, flow gosnappi.Flow, f
 	ate.OTG().StopTraffic(t)
 	time.Sleep(45 * time.Second)
 	otgutils.LogFlowMetrics(t, ate.OTG(), top)
+	otgutils.LogPortMetrics(t, ate.OTG(), top)
 
 	txPkts := gnmi.Get(t, ate.OTG(), gnmi.OTG().Flow(flow.Name()).Counters().OutPkts().State())
 	rxPkts := gnmi.Get(t, ate.OTG(), gnmi.OTG().Flow(flow.Name()).Counters().InPkts().State())
@@ -281,7 +282,7 @@ func ValidateTraffic(t *testing.T, ate *ondatra.ATEDevice, flow gosnappi.Flow, f
 			t.Errorf("EgressTracking counter in-pkts got %d, want %d", got, rxPkts)
 		}
 	}
-	return float32(lossPct)
+	return lossPct
 }
 
 // testArgs holds the objects needed by a test case.
