@@ -12,6 +12,7 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	otg "github.com/openconfig/ondatra/otg"
+	"github.com/openconfig/ygnmi/ygnmi"
 )
 
 var (
@@ -95,11 +96,29 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	t.Logf("Pushing config to ATE and starting protocols...")
 	otg.PushConfig(t, config)
 	otg.StartProtocols(t)
+	waitOTGARPEntry(t, "IPv4")
+	waitOTGARPEntry(t, "IPv6")
 	return config
 }
 
+func waitOTGARPEntry(t *testing.T, ipType string) {
+	ate := ondatra.ATE(t, "ate")
+	otg := ate.OTG()
+
+	switch ipType {
+	case "IPv4":
+		gnmi.WatchAll(t, otg, gnmi.OTG().Interface(atePort1.Name+".Eth").Ipv4NeighborAny().LinkLayerAddress().State(), time.Minute, func(val *ygnmi.Value[string]) bool {
+			return val.IsPresent()
+		}).Await(t)
+	case "IPv6":
+		gnmi.WatchAll(t, otg, gnmi.OTG().Interface(atePort1.Name+".Eth").Ipv6NeighborAny().LinkLayerAddress().State(), time.Minute, func(val *ygnmi.Value[string]) bool {
+			return val.IsPresent()
+		}).Await(t)
+	}
+}
+
 func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	trafficDuration := 2 * time.Second
 	otg := ate.OTG()
 	// capture
