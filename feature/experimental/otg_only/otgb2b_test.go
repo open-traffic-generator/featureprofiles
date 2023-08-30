@@ -69,8 +69,9 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	flowipv4.TxRx().Device().
 		SetTxNames([]string{srcIpv4.Name()}).SetRxNames([]string{dstIpv4.Name()})
 	flowipv4.Size().SetFixed(512)
-	flowipv4.Rate().SetPercentage(0.01)
-	flowipv4.Duration().SetChoice("continuous")
+	flowipv4.Rate().SetPercentage(1)
+	flowipv4.Duration().SetChoice("fixed_packets")
+	flowipv4.Duration().FixedPackets().SetPackets(1000)
 	e1 := flowipv4.Packet().Add().Ethernet()
 	e1.Src().SetValue(srcEth.Mac())
 	v4 := flowipv4.Packet().Add().Ipv4()
@@ -82,8 +83,9 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	flowipv6.TxRx().Device().
 		SetTxNames([]string{srcIpv6.Name()}).SetRxNames([]string{dstIpv6.Name()})
 	flowipv6.Size().SetFixed(512)
-	flowipv6.Rate().SetPercentage(0.01)
-	flowipv6.Duration().SetChoice("continuous")
+	flowipv6.Rate().SetPercentage(1)
+	flowipv6.Duration().SetChoice("fixed_packets")
+	flowipv6.Duration().FixedPackets().SetPackets(1000)
 	e2 := flowipv6.Packet().Add().Ethernet()
 	e2.Src().SetValue(srcEth.Mac())
 	v6 := flowipv6.Packet().Add().Ipv6()
@@ -120,7 +122,7 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	if err != nil {
 		t.Fatalf("ERROR: Could not create temporary pcap file: %v\n", err)
 	}
-	// defer os.Remove(f.Name())
+	defer os.Remove(f.Name())
 
 	if _, err := f.Write(bytes); err != nil {
 		t.Fatalf("ERROR: Could not write bytes to pcap file: %v\n", err)
