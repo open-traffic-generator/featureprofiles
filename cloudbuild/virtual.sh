@@ -41,6 +41,7 @@ sudo chmod 755 /usr/bin/cleanup.sh
 sudo systemctl daemon-reload
 sudo systemctl disable cleanup.service
 sudo systemctl enable cleanup.timer
+sudo systemctl start cleanup.timer
 
 readonly platform="${1}"
 readonly dut_tests="${2}"
@@ -50,6 +51,9 @@ case ${platform} in
     vendor_creds=ARISTA/admin/admin
     ;;
   juniper_cptx)
+    vendor_creds=JUNIPER/root/Google123
+    ;;
+  juniper_ncptx)
     vendor_creds=JUNIPER/root/Google123
     ;;
   cisco_8000e)
@@ -81,6 +85,7 @@ function metadata_kne_topology() {
   kne_topology_file["TESTBED_DUT_ATE_2LINKS"]="${topo_prefix}/dutate.textproto"
   kne_topology_file["TESTBED_DUT_ATE_4LINKS"]="${topo_prefix}/dutate.textproto"
   kne_topology_file["TESTBED_DUT_ATE_9LINKS_LAG"]="${topo_prefix}/dutate_lag.textproto"
+  kne_topology_file["TESTBED_DUT_DUT_ATE_2LINKS"]="${topo_prefix}/dutdutate.textproto"
   for p in "${!kne_topology_file[@]}"; do
     if grep -q "testbed.*${p}$" "${metadata_test_path}"/metadata.textproto; then
       echo "${kne_topology_file[${p}]}"
@@ -109,6 +114,7 @@ for dut_test in ${dut_tests}; do
   kne_topology=$(metadata_kne_topology "${test_path}")
   sed -i "s/ceos:latest/us-west1-docker.pkg.dev\/gep-kne\/arista\/ceos:ga/g" /tmp/kne/"${kne_topology}"
   sed -i "s/cptx:latest/us-west1-docker.pkg.dev\/gep-kne\/juniper\/cptx:ga/g" /tmp/kne/"${kne_topology}"
+  sed -i "s/ncptx:latest/us-west1-docker.pkg.dev\/gep-kne\/juniper\/ncptx:ga/g" /tmp/kne/"${kne_topology}"
   sed -i "s/8000e:latest/us-west1-docker.pkg.dev\/gep-kne\/cisco\/8000e:ga/g" /tmp/kne/"${kne_topology}"
   sed -i "s/xrd:latest/us-west1-docker.pkg.dev\/gep-kne\/cisco\/xrd:ga/g" /tmp/kne/"${kne_topology}"
   sed -i "s/srlinux:latest/us-west1-docker.pkg.dev\/gep-kne\/nokia\/srlinux:ga/g" /tmp/kne/"${kne_topology}"
