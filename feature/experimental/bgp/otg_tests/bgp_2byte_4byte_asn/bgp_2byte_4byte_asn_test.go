@@ -200,22 +200,21 @@ func verifyPeer(t *testing.T, nbr *bgpNbr, dut *ondatra.DUTDevice) {
 func configureATE(t *testing.T, ateParams *bgpNbr, connectionType string) gosnappi.Config {
 	t.Helper()
 	ate := ondatra.ATE(t, "ate")
-	otg := ate.OTG()
-	topo := otg.NewConfig(t)
+	topo := gosnappi.NewConfig()
 	port1 := ate.Port(t, "port1")
 
 	dev := topo.Devices().Add().SetName(ateSrc.Name)
 	devEth := dev.Ethernets().Add().SetName(ateSrc.Name + ".Eth").SetMac(ateSrc.MAC)
 	devEth.Connection().SetPortName(port1.Name())
 	devIpv4 := devEth.Ipv4Addresses().Add().SetName(ateSrc.Name + ".IPv4")
-	devIpv4.SetAddress(ateSrc.IPv4).SetGateway(dutSrc.IPv4).SetPrefix(int32(ateSrc.IPv4Len))
+	devIpv4.SetAddress(ateSrc.IPv4).SetGateway(dutSrc.IPv4).SetPrefix(uint32(ateSrc.IPv4Len))
 	devIpv6 := devEth.Ipv6Addresses().Add().SetName(ateSrc.Name + ".IPv6")
-	devIpv6.SetAddress(ateSrc.IPv6).SetGateway(dutSrc.IPv6).SetPrefix(int32(ateSrc.IPv6Len))
+	devIpv6.SetAddress(ateSrc.IPv6).SetGateway(dutSrc.IPv6).SetPrefix(uint32(ateSrc.IPv6Len))
 
 	devBgp := dev.Bgp().SetRouterId(devIpv4.Address())
 	if ateParams.isV4 {
 		devBgp4Peer := devBgp.Ipv4Interfaces().Add().SetIpv4Name(devIpv4.Name()).Peers().Add().SetName(ateSrc.Name + ".BGP4.peer")
-		devBgp4Peer.SetPeerAddress(ateParams.peerIP).SetAsNumber(int32(ateParams.localAS))
+		devBgp4Peer.SetPeerAddress(ateParams.peerIP).SetAsNumber(uint32(ateParams.localAS))
 		if connectionType == connInternal {
 			devBgp4Peer.SetAsType(gosnappi.BgpV4PeerAsType.IBGP)
 		} else {
@@ -223,7 +222,7 @@ func configureATE(t *testing.T, ateParams *bgpNbr, connectionType string) gosnap
 		}
 	} else {
 		devBgp6Peer := devBgp.Ipv6Interfaces().Add().SetIpv6Name(devIpv6.Name()).Peers().Add().SetName(ateSrc.Name + ".BGP6.peer")
-		devBgp6Peer.SetPeerAddress(ateParams.peerIP).SetAsNumber(int32(ateParams.localAS))
+		devBgp6Peer.SetPeerAddress(ateParams.peerIP).SetAsNumber(uint32(ateParams.localAS))
 		if connectionType == connInternal {
 			devBgp6Peer.SetAsType(gosnappi.BgpV6PeerAsType.IBGP)
 		} else {
