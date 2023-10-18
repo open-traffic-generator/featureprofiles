@@ -42,7 +42,7 @@ const (
 	ipv4PrefixLen             = 30
 	ipv6                      = "IPv6"
 	ipv6PrefixLen             = 126
-	mtu                       = 9_216
+	mtu                       = 9000  // Ixia-c / OTG supports max MTU of 9000
 	trafficRunDuration        = 15 * time.Second
 	trafficStopWaitDuration   = 10 * time.Second
 	acceptablePacketSizeDelta = 0.5
@@ -105,7 +105,7 @@ var (
 		{
 			name:     "flow_size_9500_should_fail",
 			desc:     "9500 byte flow that will be dropped",
-			flowSize: mtu + 34,
+			flowSize: mtu + 500,
 		},
 		{
 			name:     "flow_size_1500",
@@ -123,9 +123,9 @@ var (
 			flowSize: 4000,
 		},
 		{
-			name:     "flow_size_9202",
-			desc:     "9202 byte flow",
-			flowSize: 9202,
+			name:     "flow_size_9000",
+			desc:     "9000 byte flow",
+			flowSize: 9000,
 		},
 	}
 )
@@ -373,9 +373,13 @@ func configureATE(t *testing.T, ate *ondatra.ATEDevice) gosnappi.Config {
 		port := ate.Port(t, portName)
 
 		dutPort := dutPorts[portName]
-
+		fmt.Println(dutPort.MTU)
+		fmt.Println(portName)
 		portAttrs.AddToOTG(otgConfig, port, dutPort)
-		// configure for KNE
+
+		// If MTU of the emulated interface of a test port needs to be greater than default of 1500,
+		// then the MTU of test NIC must be increased to match the maximum MTU of emulated interface
+		otgConfig.Layer1().Add().SetName(portName).SetPortNames([]string{portName}).SetMtu(uint32(dutPort.MTU))
 	}
 
 	return otgConfig
