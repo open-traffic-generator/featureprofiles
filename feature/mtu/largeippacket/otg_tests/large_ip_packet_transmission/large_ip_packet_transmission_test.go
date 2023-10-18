@@ -43,7 +43,7 @@ const (
 	ipv6                      = "IPv6"
 	ipv6PrefixLen             = 126
 	mtu                       = 9000  // Ixia-c / OTG supports max MTU of 9000
-	trafficRunDuration        = 15 * time.Second
+	trafficRunDuration        = 5 * time.Second
 	trafficStopWaitDuration   = 10 * time.Second
 	acceptablePacketSizeDelta = 0.5
 	acceptableLossPercent     = 0.5
