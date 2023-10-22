@@ -39,7 +39,7 @@ func TestMain(m *testing.M) {
 }
 func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
-	config := otg.NewConfig(t)
+	config := gosnappi.NewConfig()
 	srcPort := config.Ports().Add().SetName("port1")
 	dstPort := config.Ports().Add().SetName("port2")
 	config.Captures().Add().
