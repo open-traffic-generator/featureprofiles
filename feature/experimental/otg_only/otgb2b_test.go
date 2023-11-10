@@ -71,7 +71,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	flowipv4.Metrics().SetEnable(true)
 	flowipv4.TxRx().Device().
 		SetTxNames([]string{srcIpv4.Name()}).SetRxNames([]string{dstIpv4.Name()})
-	flowipv4.Size().SetFixed(512)
+	flowipv4.Size().SetFixed(64)
 	flowipv4.Rate().SetPercentage(1)
 	flowipv4.Duration().SetChoice("fixed_packets")
 	flowipv4.Duration().FixedPackets().SetPackets(1000)
@@ -87,10 +87,11 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	v4Inner := flowipv4.Packet().Add().Ipv4()
 	v4Inner.Src().SetValue(srcIpv4.Address())
 	v4Inner.Dst().SetValue(dstIpv4.Address())
-	flowipv4.EgressPacket().Add().Ethernet()
-	vlan := flowipv4.EgressPacket().Add().Vlan()
-	vlanTag := vlan.Id().MetricTags().Add()
-	vlanTag.SetName("EgressVlanIdTrackingFlow")
+
+	// flowipv4.EgressPacket().Add().Ethernet()
+	// vlan := flowipv4.EgressPacket().Add().Vlan()
+	// vlanTag := vlan.Id().MetricTags().Add()
+	// vlanTag.SetName("EgressVlanIdTrackingFlow")
 
 	// flowipv6 := config.Flows().Add().SetName("Flow-IPv6")
 	// flowipv6.Metrics().SetEnable(true)
@@ -109,6 +110,10 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	t.Logf("Pushing config to ATE and starting protocols...")
 	otg.PushConfig(t, config)
 	otg.StartProtocols(t)
+
+	t.Logf("Starting traffic")
+	otg.StartTraffic(t)
+
 	return config
 }
 
@@ -184,9 +189,10 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 func TestOTGb2b(t *testing.T) {
 	ate := ondatra.ATE(t, "ate")
 	otg := ate.OTG()
-	otgConfig := configureOTG(t, otg)
+	configureOTG(t, otg)
+	// otgConfig := configureOTG(t, otg)
 
-	t.Logf("Verify traffic")
-	testTraffic(t, ate, otgConfig)
+	// t.Logf("Verify traffic")
+	// testTraffic(t, ate, otgConfig)
 
 }

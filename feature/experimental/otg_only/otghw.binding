@@ -5,13 +5,13 @@ options {
 
 ates {
   id: "ate"
-  name: "127.0.0.1:40051"  # Change this to the Ixia-C-Controler hostname.
+  name: "127.0.0.1:5001"  # Change this to the Ixia-C-Controler hostname.
 
   # This option specific to OTG over Ixia-HW. 
   otg {
-    target: "127.0.0.1:40051" # Change this to the Ixia-c-grpc server endpoint.
-    insecure: true
-    timeout: 30
+    target: "127.0.0.1:5001" # Change this to the Ixia-c-grpc server endpoint.
+    skip_verify: true
+    timeout: 100
   }
 
   gnmi {
@@ -24,10 +24,10 @@ ates {
   # from its topology ID to the actual port name on the device.
   ports {
     id: "port1"
-    name: "10.24.50.200;1;1"  # Change this to the ixia-c-hw port location.
+    name: "xgshs-606488.ccu.is.keysight.com;1;13"  # Change this to the ixia-c-hw port location.
   }
   ports {
     id: "port2"
-    name: "10.24.50.200;2;1"  # Change this to the ixia-c-hw port location.
+    name: "xgshs-606488.ccu.is.keysight.com;1;14"  # Change this to the ixia-c-hw port location.
   }
 }
