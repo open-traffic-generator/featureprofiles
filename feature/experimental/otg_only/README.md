@@ -15,3 +15,9 @@ FOR HW ports
     go test -v otgb2b_test.go -binding otghw.binding -testbed otgb2b.testbed
 5. Remove the 3 containers used in otg-hw setup with:
     docker compose -f docker-compose.yml --profile all down
+
+FOR UHD Ports
+1. setup should already be deployed with b2b ports
+2. Modify the otgb2b-uhd.binding file to match your setup.
+3. Run the Test with:
+ go test -v otgb2b_test.go -binding otghw.binding -testbed otgb2b.testbed
