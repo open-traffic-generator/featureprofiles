@@ -67,7 +67,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	flowipv4.Size().SetFixed(512)
 	flowipv4.Rate().SetPercentage(1)
 	flowipv4.Duration().SetChoice("fixed_packets")
-	flowipv4.Duration().FixedPackets().SetPackets(1000)
+	flowipv4.Duration().FixedPackets().SetPackets(10000)
 	e1 := flowipv4.Packet().Add().Ethernet()
 	e1.Src().SetValue(srcEth.Mac())
 	e1.Dst().SetValue(dstEth.Mac())
@@ -82,7 +82,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	flowipv6.Size().SetFixed(512)
 	flowipv6.Rate().SetPercentage(1)
 	flowipv6.Duration().SetChoice("fixed_packets")
-	flowipv6.Duration().FixedPackets().SetPackets(1000)
+	flowipv6.Duration().FixedPackets().SetPackets(10000)
 	e2 := flowipv6.Packet().Add().Ethernet()
 	e2.Src().SetValue(srcEth.Mac())
 	e2.Dst().SetValue(dstEth.Mac())
@@ -98,7 +98,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
 func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	time.Sleep(2 * time.Second)
-	trafficDuration := 2 * time.Second
+	trafficDuration := 10 * time.Second
 	otg := ate.OTG()
 
 	t.Logf("Starting traffic")
@@ -109,7 +109,6 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	time.Sleep(5 * time.Second)
 	otgutils.LogPortMetrics(t, otg, c)
 	otgutils.LogFlowMetrics(t, otg, c)
-
 
 	for _, flow := range c.Flows().Items() {
 		t.Logf("Verifying flow metrics for flow %s\n", flow.Name())
