@@ -1,8 +1,8 @@
-version: "2"
-
+version: "3.9"
 services:
-  ixia-c-ixhw-server:
-    image: ghcr.io/open-traffic-generator/ixia-c-ixhw-server:0.11.1-1
+  keng-layer23-hw-server:
+    image: ghcr.io/open-traffic-generator/keng-layer23-hw-server:0.13.0-6
+    container_name: keng-layer23-hw-server
     restart: always
     ports:
       - "5000:5000"
@@ -13,43 +13,34 @@ services:
       - "--trace"
       - "--log-level"
       - "trace"
-      - "--grpc-trace-collector"
-      - "jaeger:4317"
-  ixia-c-gnmi-server:
-    image: ghcr.io/open-traffic-generator/ixia-c-gnmi-server:1.11.1
+  otg-gnmi-server:
+    image: ghcr.io/open-traffic-generator/otg-gnmi-server:1.13.0
+    container_name: otg-gnmi-server
     profiles: ["all", "gnmi"]
     restart: always
     ports:
       - "50051:50051"
     depends_on:
-      ixia-c-controller:
+      keng-controller:
         condition: service_started
     command:
       - "-http-server"
-      - "https://ixia-c-controller:8443"
+      - "https://keng-controller:8443"
       - "--debug"
-  ixia-c-controller:
-    image: ghcr.io/open-traffic-generator/ixia-c-controller:0.0.1-3865
+  keng-controller:
+    image: ghcr.io/open-traffic-generator/keng-controller:0.1.0-53
+    container_name: keng-controller
     restart: always
     ports:
       - "8443:8443"
       - "40051:40051"
     depends_on:
-      ixia-c-ixhw-server:
+      keng-layer23-hw-server:
         condition: service_started
     command:
       - "--accept-eula"
       - "--debug"
-      - "--ixia-c-ixhw-server"
-      - "ixia-c-ixhw-server:5001"
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    profiles: ["all", "otlp"]
-    restart: always
+      - "--keng-layer23-hw-server"
+      - "keng-layer23-hw-server:5001"
     environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "16685:16685"
-
+      - LICENSE_SERVERS=10.36.237.239
