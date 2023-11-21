@@ -1,0 +1,34 @@
+options {
+  username: "admin"
+  password: "admin"
+}
+
+ates {
+  id: "ate"
+  name: "uhd controller"  # Change this to the Ixia-C-Controler hostname.
+
+  # This option specific to OTG over Ixia-HW. 
+  otg {
+    target: "nanorbit0.lbj.is.keysight.com:50088" # Change this to the Ixia-c-grpc server endpoint.
+    insecure: true
+    timeout: 100
+  }
+
+  gnmi {
+    target: "nanorbit0.lbj.is.keysight.com:50089"  # Change this to the Ixia-c-gnmi server endpoint.
+    skip_verify: true
+    timeout: 100
+  }
+
+  # Before this binding can be used with a topology, add ports mapping
+  # from its topology ID to the actual port name on the device.
+  ports {
+    id: "port1"
+    name: "uhd://tf2-qa6.lbj.is.keysight.com:7531;5+nanorbit0.lbj.is.keysight.com:50075"  # Change this to the ixia-c-hw port location.
+  }
+  ports {
+    id: "port2"
+    name: "uhd://tf2-qa6.lbj.is.keysight.com:7531;6+nanorbit0.lbj.is.keysight.com:50076"  # Change this to the ixia-c-hw port location.
+  }
+}
+

@@ -1,7 +1,7 @@
 package otg_b2b
 
 import (
-	"os"
+	//"os"
 	"testing"
 	"time"
 
@@ -42,10 +42,6 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	config := gosnappi.NewConfig()
 	srcPort := config.Ports().Add().SetName("port1")
 	dstPort := config.Ports().Add().SetName("port2")
-	config.Captures().Add().
-		SetName("otg_cap").
-		SetPortNames([]string{dstPort.Name()}).
-		SetFormat(gosnappi.CaptureFormat.PCAP)
 
 	srcDev := config.Devices().Add().SetName(atePort1.Name)
 	srcEth := srcDev.Ethernets().Add().SetName(atePort1.Name + ".Eth").SetMac(atePort1.MAC)
@@ -74,6 +70,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	flowipv4.Duration().FixedPackets().SetPackets(1000)
 	e1 := flowipv4.Packet().Add().Ethernet()
 	e1.Src().SetValue(srcEth.Mac())
+	e1.Dst().SetValue(dstEth.Mac())
 	v4 := flowipv4.Packet().Add().Ipv4()
 	v4.Src().SetValue(srcIpv4.Address())
 	v4.Dst().SetValue(dstIpv4.Address())
@@ -88,6 +85,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	flowipv6.Duration().FixedPackets().SetPackets(1000)
 	e2 := flowipv6.Packet().Add().Ethernet()
 	e2.Src().SetValue(srcEth.Mac())
+	e2.Dst().SetValue(dstEth.Mac())
 	v6 := flowipv6.Packet().Add().Ipv6()
 	v6.Src().SetValue(srcIpv6.Address())
 	v6.Dst().SetValue(dstIpv6.Address())
@@ -102,10 +100,6 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	time.Sleep(2 * time.Second)
 	trafficDuration := 2 * time.Second
 	otg := ate.OTG()
-	// capture
-	cs := gosnappi.NewControlState()
-	cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.START)
-	otg.SetControlState(t, cs)
 
 	t.Logf("Starting traffic")
 	otg.StartTraffic(t)
@@ -116,18 +110,6 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	otgutils.LogPortMetrics(t, otg, c)
 	otgutils.LogFlowMetrics(t, otg, c)
 
-	bytes := otg.GetCapture(t, gosnappi.NewCaptureRequest().SetPortName(c.Ports().Items()[1].Name()))
-	time.Sleep(20 * time.Second)
-	f, err := os.CreateTemp(".", "pcap")
-	if err != nil {
-		t.Fatalf("ERROR: Could not create temporary pcap file: %v\n", err)
-	}
-	defer os.Remove(f.Name())
-
-	if _, err := f.Write(bytes); err != nil {
-		t.Fatalf("ERROR: Could not write bytes to pcap file: %v\n", err)
-	}
-	f.Close()
 
 	for _, flow := range c.Flows().Items() {
 		t.Logf("Verifying flow metrics for flow %s\n", flow.Name())
