@@ -50,7 +50,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
 	srcDev := config.Devices().Add().SetName(atePort1.Name)
 	srcEth := srcDev.Ethernets().Add().SetName(atePort1.Name + ".Eth").SetMac(atePort1.MAC)
-	srcEth.Connection().SetChoice(gosnappi.EthernetConnectionChoice.PORT_NAME).SetPortName(srcPort.Name())
+	srcEth.Connection().SetPortName(srcPort.Name())
 	srcIpv4 := srcEth.Ipv4Addresses().Add().SetName(atePort1.Name + ".IPv4")
 	srcIpv4.SetAddress(atePort1.IPv4).SetGateway(atePort2.IPv4).SetPrefix(uint32(atePort1.IPv4Len))
 	srcIpv6 := srcEth.Ipv6Addresses().Add().SetName(atePort1.Name + ".IPv6")
@@ -58,7 +58,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
 	dstDev := config.Devices().Add().SetName(atePort2.Name)
 	dstEth := dstDev.Ethernets().Add().SetName(atePort2.Name + ".Eth").SetMac(atePort2.MAC)
-	dstEth.Connection().SetChoice(gosnappi.EthernetConnectionChoice.PORT_NAME).SetPortName(dstPort.Name())
+	dstEth.Connection().SetPortName(dstPort.Name())
 	dstIpv4 := dstEth.Ipv4Addresses().Add().SetName(atePort2.Name + ".IPv4")
 	dstIpv4.SetAddress(atePort2.IPv4).SetGateway(atePort1.IPv4).SetPrefix(uint32(atePort2.IPv4Len))
 	dstIpv6 := dstEth.Ipv6Addresses().Add().SetName(atePort2.Name + ".IPv6")
@@ -71,7 +71,6 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		SetTxNames([]string{srcIpv4.Name()}).SetRxNames([]string{dstIpv4.Name()})
 	flowipv4.Size().SetFixed(512)
 	flowipv4.Rate().SetPercentage(1)
-	flowipv4.Duration().SetChoice("fixed_packets")
 	flowipv4.Duration().FixedPackets().SetPackets(1000)
 	e1 := flowipv4.Packet().Add().Ethernet()
 	e1.Src().SetValue(srcEth.Mac())
@@ -86,7 +85,6 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		SetTxNames([]string{srcIpv6.Name()}).SetRxNames([]string{dstIpv6.Name()})
 	flowipv6.Size().SetFixed(512)
 	flowipv6.Rate().SetPercentage(1)
-	flowipv6.Duration().SetChoice("fixed_packets")
 	flowipv6.Duration().FixedPackets().SetPackets(1000)
 	e2 := flowipv6.Packet().Add().Ethernet()
 	e2.Src().SetValue(srcEth.Mac())
