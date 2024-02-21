@@ -143,7 +143,7 @@ func dynamicBinding(bindingFile string) (binding.Binding, error) {
 		return nil, fmt.Errorf("unable to read binding file: %w", err)
 	}
 	api := goopentestbed.NewApi()
-	api.NewHttpTransport().SetLocation("http://10.39.71.18:8080")
+	api.NewHttpTransport().SetLocation("http://127.0.0.1:8080")
 	testbed := goopentestbed.NewTestbed()
 	testbed.Unmarshal().FromJson(string(in))
 	b := &bindpb.Binding{}
