@@ -199,7 +199,7 @@ func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config, want
 	}
 }
 
-func sendTraffic(t *testing.T, otg *otg.OTG, c gosnappi.Config) {
+func sendTraffic(t *testing.T, otg *otg.OTG) {
 	t.Logf("Starting traffic")
 	otg.StartTraffic(t)
 	time.Sleep(trafficDuration)
@@ -247,6 +247,6 @@ func TestOTGb2bBgp(t *testing.T) {
 	t.Logf("Verify OTG BGP sessions up")
 	verifyOTGBGPTelemetry(t, otg, otgConfig, "ESTABLISHED")
 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
-	sendTraffic(t, otg, otgConfig)
+	sendTraffic(t, otg)
 	verifyTraffic(t, ate, otgConfig, false)
 }
