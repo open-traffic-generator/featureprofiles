@@ -11,6 +11,7 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	otg "github.com/openconfig/ondatra/otg"
+	"github.com/openconfig/ygnmi/ygnmi"
 )
 
 const (
@@ -183,6 +184,20 @@ func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config, want
 	}
 }
 
+// verifyIsis checks the status of the ISIS routers
+func verifyIsis(t *testing.T, otg *otg.OTG, c gosnappi.Config) {
+
+	for _, d := range c.Devices().Items() {
+		isisName := d.Isis().Name()
+		gnmi.Watch(t, otg, gnmi.OTG().IsisRouter(isisName).Counters().Level2().SessionsUp().State(), 30*time.Second, func(v *ygnmi.Value[uint64]) bool {
+			time.Sleep(5 * time.Second)
+			val, present := v.Val()
+			return present && val == 1
+		}).Await(t)
+
+	}
+}
+
 func sendTraffic(t *testing.T, otg *otg.OTG) {
 	t.Logf("Starting traffic")
 	otg.StartTraffic(t)
@@ -197,6 +212,7 @@ func TestOTGB2bIsis(t *testing.T) {
 	// Configure Isis and Push config and Start protocols
 	otgConfig := configureOTG(t, otg)
 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
+	verifyIsis(t, otg, otgConfig)
 	sendTraffic(t, otg)
 	verifyTraffic(t, ate, otgConfig, false)
 
