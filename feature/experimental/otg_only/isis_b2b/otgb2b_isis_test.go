@@ -189,14 +189,44 @@ func verifyIsis(t *testing.T, otg *otg.OTG, c gosnappi.Config) {
 
 	for _, d := range c.Devices().Items() {
 		isisName := d.Isis().Name()
-		gnmi.Watch(t, otg, gnmi.OTG().IsisRouter(isisName).Counters().Level2().SessionsUp().State(), 30*time.Second, func(v *ygnmi.Value[uint64]) bool {
+		for {
+			level2State := gnmi.Get(t, otg, gnmi.OTG().IsisRouter(isisName).Counters().Level2().State())
+			t.Logf("L2 sessions flap for isis router %s are %d", isisName, level2State.GetSessionsFlap())
+			t.Logf("L2 sessions up for isis router %s are %d", isisName, level2State.GetSessionsUp())
+			if level2State.GetSessionsUp() == 1 {
+				break
+			}
+			time.Sleep(5 * time.Second)
+		}
+		_, ok := gnmi.Watch(t, otg, gnmi.OTG().IsisRouter(isisName).Counters().Level2().SessionsUp().State(), 5*time.Minute, func(v *ygnmi.Value[uint64]) bool {
 			time.Sleep(5 * time.Second)
 			val, present := v.Val()
+			t.Logf("v is %v", v)
+			t.Logf("present is %v and val is %d", present, val)
 			return present && val == 1
 		}).Await(t)
+		if !ok {
+			t.Errorf("No ISIS session up for router %s or timeout occured while waiting", isisName)
+		}
 
 	}
 }
+
+// verifyIsisRoutes checks the metric of one route
+// func verifyIsisRoutes(t *testing.T, otg *otg.OTG, isisName, route string) {
+// 	metrics := gnmi.GetAll(t, otg, gnmi.OTG().IsisRouter(isisName).LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().PrefixAny().Metric().State())
+// 	t.Logf("Metric for route %s is %d", route, metrics[0])
+// 	_, ok := gnmi.WatchAll(t, otg, gnmi.OTG().IsisRouter(isisName).LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().PrefixAny().Metric().State(), time.Minute, func(v *ygnmi.Value[uint32]) bool {
+// 		metric, present := v.Val()
+// 		if present {
+// 			if metric == 10 {
+// 				return true
+// 			}
+// 		}
+// 		return false
+// 	}).Await(t)
+
+// }
 
 func sendTraffic(t *testing.T, otg *otg.OTG) {
 	t.Logf("Starting traffic")
@@ -213,6 +243,7 @@ func TestOTGB2bIsis(t *testing.T) {
 	otgConfig := configureOTG(t, otg)
 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
 	verifyIsis(t, otg, otgConfig)
+	// verifyIsisRoutes(t, otg, "dtxIsis", "201.1.1.1")
 	sendTraffic(t, otg)
 	verifyTraffic(t, ate, otgConfig, false)
 
