@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	configFile      = "bgp.yaml"
+	configFile      = "bgp.json"
 	trafficDuration = 10 * time.Second
 	tolerance       = 50
 	tolerancePct    = 2
@@ -125,7 +125,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 // 	}
 // }
 
-func TestPush(t *testing.T) {
+func TestOtgPush(t *testing.T) {
 	ate := ondatra.ATE(t, "ate")
 	otg := ate.OTG()
 	configureOTG(t, otg)
