@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"plugin"
+	"strings"
 	"time"
 
 	"flag"
@@ -151,7 +152,8 @@ func dynamicBinding(bindingFile string) (binding.Binding, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := prototext.Unmarshal([]byte(*output), b); err != nil {
+	pt := convertToPlainText(output)
+	if err := prototext.Unmarshal([]byte(pt), b); err != nil {
 		return nil, fmt.Errorf("unable to parse binding file: %w", err)
 	}
 	for _, ate := range b.Ates {
@@ -222,4 +224,10 @@ func (b *rundataBind) Release(ctx context.Context) error {
 		ondatra.Report().AddSuiteProperty(k, v)
 	}
 	return b.Binding.Release(ctx)
+}
+
+func convertToPlainText(output *string) string {
+	unescapedJSON := strings.ReplaceAll(*output, "\\\"", "\"")
+	unescapedJSON = strings.ReplaceAll(unescapedJSON, "\\n", "\n")
+	return strings.Trim(unescapedJSON, `"`)
 }
