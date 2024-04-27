@@ -124,52 +124,119 @@ func (ad *ateData) ConfigureOTG(t *testing.T, otg *otg.OTG, ateList []string) go
 		eth := dev.Ethernets().Add().SetName(devName + ".Eth").SetMac(v.iface.mac)
 		eth.Connection().SetPortName(port.Name())
 		bgp := dev.Bgp().SetRouterId(v.iface.routerId)
+
 		if v.ip.v4 != "" {
 			address := strings.Split(v.ip.v4, "/")[0]
 			prefixInt4, _ := strconv.Atoi(strings.Split(v.ip.v4, "/")[1])
-			ipv4 := eth.Ipv4Addresses().Add().SetName(devName + ".IPv4").SetAddress(address).SetGateway(v.neighbor).SetPrefix(uint32(prefixInt4))
-			bgp4Name := devName + ".BGP4.peer"
-			bgp4Peer := bgp.Ipv4Interfaces().Add().SetIpv4Name(ipv4.Name()).Peers().Add().SetName(bgp4Name).SetPeerAddress(ipv4.Gateway()).SetAsNumber(uint32(v.as)).SetAsType(gosnappi.BgpV4PeerAsType.EBGP)
 
-			bgp4Peer.Capability().SetIpv4UnicastAddPath(true).SetIpv6UnicastAddPath(true)
-			bgp4Peer.LearnedInformationFilter().SetUnicastIpv4Prefix(true).SetUnicastIpv6Prefix(true)
+			ipv4 := eth.Ipv4Addresses().
+				Add().
+				SetName(devName + ".IPv4").
+				SetAddress(address).
+				SetGateway(v.neighbor).
+				SetPrefix(uint32(prefixInt4))
+	
+			bgp4Name := devName + ".BGP4.peer"
+			bgp4Peer := bgp.Ipv4Interfaces().
+				Add().
+				SetIpv4Name(ipv4.Name()).
+				Peers().
+				Add().
+				SetName(bgp4Name).
+				SetPeerAddress(ipv4.Gateway()).
+				SetAsNumber(uint32(v.as)).
+				SetAsType(gosnappi.BgpV4PeerAsType.EBGP)
+
+			bgp4Peer.Capability().
+				SetIpv4UnicastAddPath(true).
+				SetIpv6UnicastAddPath(true)
+
+			bgp4Peer.LearnedInformationFilter().
+				SetUnicastIpv4Prefix(true).
+				SetUnicastIpv6Prefix(true)
 
 			bgp4ObjectMap[bgp4Name] = bgp4Peer
 			ipv4ObjectMap[devName+".IPv4"] = ipv4
 		}
+
 		if v.ip.v6 != "" {
 			address := strings.Split(v.ip.v6, "/")[0]
 			prefixInt6, _ := strconv.Atoi(strings.Split(v.ip.v6, "/")[1])
-			ipv6 := eth.Ipv6Addresses().Add().SetName(devName + ".IPv6").SetAddress(address).SetGateway(v.neighbor).SetPrefix(uint32(prefixInt6))
-			bgp6Name := devName + ".BGP6.peer"
-			bgp6Peer := bgp.Ipv6Interfaces().Add().SetIpv6Name(ipv6.Name()).Peers().Add().SetName(bgp6Name).SetPeerAddress(ipv6.Gateway()).SetAsNumber(uint32(v.as)).SetAsType(gosnappi.BgpV6PeerAsType.EBGP)
 
-			bgp6Peer.Capability().SetIpv4UnicastAddPath(true).SetIpv6UnicastAddPath(true).SetExtendedNextHopEncoding(true)
-			bgp6Peer.LearnedInformationFilter().SetUnicastIpv4Prefix(true).SetUnicastIpv6Prefix(true)
+			ipv6 := eth.Ipv6Addresses().
+				Add().SetName(devName + ".IPv6").
+				SetAddress(address).
+				SetGateway(v.neighbor).
+				SetPrefix(uint32(prefixInt6))
+
+			bgp6Name := devName + ".BGP6.peer"
+
+			bgp6Peer := bgp.Ipv6Interfaces().
+				Add().SetIpv6Name(ipv6.Name()).
+				Peers().
+				Add().
+				SetName(bgp6Name).
+				SetPeerAddress(ipv6.Gateway()).
+				SetAsNumber(uint32(v.as)).
+				SetAsType(gosnappi.BgpV6PeerAsType.EBGP)
+
+			bgp6Peer.Capability().
+				SetIpv4UnicastAddPath(true).
+				SetIpv6UnicastAddPath(true).
+				SetExtendedNextHopEncoding(true)
+
+			bgp6Peer.LearnedInformationFilter().
+				SetUnicastIpv4Prefix(true).
+				SetUnicastIpv6Prefix(true)
 
 			bgp6ObjectMap[bgp6Name] = bgp6Peer
 			ipv6ObjectMap[devName+".IPv6"] = ipv6
 		}
 	}
+
 	if ad.prefixesStart.v4 != "" {
 		if ad.Port1.v4 != "" {
+			t.Log("ADHAR1")
 			bgpName := ateList[0] + ".dev.BGP4.peer"
 			bgpPeer := bgp4ObjectMap[bgpName]
 			ip := ipv4ObjectMap[ateList[0]+".dev.IPv4"]
 			firstAdvAddr := strings.Split(ad.prefixesStart.v4, "/")[0]
 			firstAdvPrefix, _ := strconv.Atoi(strings.Split(ad.prefixesStart.v4, "/")[1])
-			bgp4PeerRoutes := bgpPeer.V4Routes().Add().SetName(bgpName + ".rr4").SetNextHopIpv4Address(ip.Address()).SetNextHopAddressType(gosnappi.BgpV4RouteRangeNextHopAddressType.IPV4).SetNextHopMode(gosnappi.BgpV4RouteRangeNextHopMode.MANUAL)
-			bgp4PeerRoutes.Addresses().Add().SetAddress(firstAdvAddr).SetPrefix(uint32(firstAdvPrefix)).SetCount(uint32(ad.prefixesCount))
-			bgp4PeerRoutes.AddPath().SetPathId(uint32(otgPort1Details.pathId))
+
+			bgp4PeerRoutes := bgpPeer.V4Routes().
+				Add().
+				SetName(bgpName + ".rr4").
+				SetNextHopIpv4Address(ip.Address()).
+				SetNextHopAddressType(gosnappi.BgpV4RouteRangeNextHopAddressType.IPV4).
+				SetNextHopMode(gosnappi.BgpV4RouteRangeNextHopMode.MANUAL)
+
+			bgp4PeerRoutes.Addresses().
+				Add().
+				SetAddress(firstAdvAddr).
+				SetPrefix(uint32(firstAdvPrefix)).
+				SetCount(uint32(ad.prefixesCount))
+
+			bgp4PeerRoutes.AddPath().
+				SetPathId(uint32(otgPort1Details.pathId))
+
+			// Adding extended community
 
 		} else {
 			bgpName := ateList[0] + ".dev.BGP6.peer"
 			bgpPeer := bgp6ObjectMap[bgpName]
 			firstAdvAddr := strings.Split(ad.prefixesStart.v4, "/")[0]
 			firstAdvPrefix, _ := strconv.Atoi(strings.Split(ad.prefixesStart.v4, "/")[1])
-			bgp4PeerRoutes := bgpPeer.V4Routes().Add().SetName(bgpName + ".rr4")
-			bgp4PeerRoutes.Addresses().Add().SetAddress(firstAdvAddr).SetPrefix(uint32(firstAdvPrefix)).SetCount(uint32(ad.prefixesCount))
-			bgp4PeerRoutes.AddPath().SetPathId(uint32(otgPort1Details.pathId))
+
+			bgp4PeerRoutes := bgpPeer.V4Routes().
+				Add().SetName(bgpName + ".rr4")
+
+			bgp4PeerRoutes.Addresses().
+				Add().SetAddress(firstAdvAddr).
+				SetPrefix(uint32(firstAdvPrefix)).
+				SetCount(uint32(ad.prefixesCount))
+
+			bgp4PeerRoutes.AddPath().
+				SetPathId(uint32(otgPort1Details.pathId))
 		}
 	}
 	if ad.prefixesStart.v6 != "" {
@@ -177,9 +244,21 @@ func (ad *ateData) ConfigureOTG(t *testing.T, otg *otg.OTG, ateList []string) go
 		bgp6Peer := bgp6ObjectMap[bgp6Name]
 		firstAdvAddr := strings.Split(ad.prefixesStart.v6, "/")[0]
 		firstAdvPrefix, _ := strconv.Atoi(strings.Split(ad.prefixesStart.v6, "/")[1])
-		bgp6PeerRoutes := bgp6Peer.V6Routes().Add().SetName(bgp6Name + ".rr6")
-		bgp6PeerRoutes.Addresses().Add().SetAddress(firstAdvAddr).SetPrefix(uint32(firstAdvPrefix)).SetCount(uint32(ad.prefixesCount))
-		bgp6PeerRoutes.AddPath().SetPathId(uint32(otgPort1Details.pathId))
+		
+		bgp6PeerRoutes := bgp6Peer.V6Routes().
+			Add().
+			SetName(bgp6Name + ".rr6")
+
+		bgp6PeerRoutes.Addresses().
+			Add().
+			SetAddress(firstAdvAddr).
+			SetPrefix(uint32(firstAdvPrefix)).
+			SetCount(uint32(ad.prefixesCount))
+
+		bgp6PeerRoutes.AddPath().
+			SetPathId(uint32(otgPort1Details.pathId))
+			
+		// Adding extended community
 	}
 
 	t.Logf("Pushing config to ATE and starting protocols...")
@@ -335,8 +414,16 @@ func checkOTGBGP4Prefix(t *testing.T, otg *otg.OTG, config gosnappi.Config, expe
 	if ok {
 		bgpPrefixes := gnmi.GetAll(t, otg, gnmi.OTG().BgpPeer(expectedOTGBGPPrefix.PeerName).UnicastIpv4PrefixAny().State())
 		for _, bgpPrefix := range bgpPrefixes {
-			if bgpPrefix.Address != nil && bgpPrefix.GetAddress() == expectedOTGBGPPrefix.Address &&
-				bgpPrefix.PrefixLength != nil && bgpPrefix.GetPrefixLength() == expectedOTGBGPPrefix.PrefixLength {
+			if bgpPrefix.Address != nil &&
+				bgpPrefix.GetAddress() == expectedOTGBGPPrefix.Address &&
+				bgpPrefix.PrefixLength != nil &&
+				bgpPrefix.GetPrefixLength() == expectedOTGBGPPrefix.PrefixLength {
+				t.Log("-----------------------")
+				t.Log(bgpPrefix.GetAddress())
+				t.Log(bgpPrefix.GetPrefixLength())
+				t.Log(bgpPrefix.GetOrigin())
+				t.Log(bgpPrefix.GetPathId())
+				t.Log("-----------------------")
 				found = true
 				break
 			}
@@ -360,8 +447,16 @@ func checkOTGBGP6Prefix(t *testing.T, otg *otg.OTG, config gosnappi.Config, expe
 	if ok {
 		bgpPrefixes := gnmi.GetAll(t, otg, gnmi.OTG().BgpPeer(expectedOTGBGPPrefix.PeerName).UnicastIpv6PrefixAny().State())
 		for _, bgpPrefix := range bgpPrefixes {
-			if bgpPrefix.Address != nil && bgpPrefix.GetAddress() == expectedOTGBGPPrefix.Address &&
-				bgpPrefix.PrefixLength != nil && bgpPrefix.GetPrefixLength() == expectedOTGBGPPrefix.PrefixLength {
+			if bgpPrefix.Address != nil &&
+				bgpPrefix.GetAddress() == expectedOTGBGPPrefix.Address &&
+				bgpPrefix.PrefixLength != nil &&
+				bgpPrefix.GetPrefixLength() == expectedOTGBGPPrefix.PrefixLength {
+				t.Log("-----------------------")
+                                t.Log(bgpPrefix.GetAddress())
+                                t.Log(bgpPrefix.GetPrefixLength())
+                                t.Log(bgpPrefix.GetOrigin())
+                                t.Log(bgpPrefix.GetPathId())
+                                t.Log("-----------------------")
 				found = true
 				break
 			}
