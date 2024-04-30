@@ -14,7 +14,7 @@
 
 // Package route_propagation_test implements RT-1.3: BGP Route Propagation.
 package route_propagation_test
-
+//github.com/open-traffic-generator/ondatra v0.0.0-20240430033017-2ba22e76e006
 import (
 	"strconv"
 	"strings"
@@ -196,7 +196,6 @@ func (ad *ateData) ConfigureOTG(t *testing.T, otg *otg.OTG, ateList []string) go
 
 	if ad.prefixesStart.v4 != "" {
 		if ad.Port1.v4 != "" {
-			t.Log("ADHAR1")
 			bgpName := ateList[0] + ".dev.BGP4.peer"
 			bgpPeer := bgp4ObjectMap[bgpName]
 			ip := ipv4ObjectMap[ateList[0]+".dev.IPv4"]
@@ -411,6 +410,12 @@ func checkOTGBGP4Prefix(t *testing.T, otg *otg.OTG, config gosnappi.Config, expe
 		}).Await(t)
 
 	found := false
+	
+	//if err != nil {
+	//	t.Log("ERROR in getting BGP state infromation via GNMI ---")
+	//	t.Fatal(err)
+	//}
+
 	if ok {
 		bgpPrefixes := gnmi.GetAll(t, otg, gnmi.OTG().BgpPeer(expectedOTGBGPPrefix.PeerName).UnicastIpv4PrefixAny().State())
 		for _, bgpPrefix := range bgpPrefixes {
@@ -423,6 +428,7 @@ func checkOTGBGP4Prefix(t *testing.T, otg *otg.OTG, config gosnappi.Config, expe
 				t.Log(bgpPrefix.GetPrefixLength())
 				t.Log(bgpPrefix.GetOrigin())
 				t.Log(bgpPrefix.GetPathId())
+				t.Log(bgpPrefix.GetNextHopIpv4Address())
 				t.Log("-----------------------")
 				found = true
 				break
@@ -456,6 +462,7 @@ func checkOTGBGP6Prefix(t *testing.T, otg *otg.OTG, config gosnappi.Config, expe
                                 t.Log(bgpPrefix.GetPrefixLength())
                                 t.Log(bgpPrefix.GetOrigin())
                                 t.Log(bgpPrefix.GetPathId())
+				t.Log(bgpPrefix.GetNextHopIpv6Address())
                                 t.Log("-----------------------")
 				found = true
 				break
