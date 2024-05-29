@@ -41,7 +41,6 @@ func TestMain(m *testing.M) {
 // -testbed $HOME/featuresprofile-ci/otg-b2b/otg-otg.testbed
 
 const (
-	vlan100         = 100
 	NetworkInstance = "default"
 	ServerPoolAddr  = "172.30.100.1"
 	NoOfDHCPClients = 10
@@ -131,10 +130,6 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		macAddr := GenerateMacAddress(0, uint32(i))
 		devDhcpEth1 := devDhcp1.Ethernets().Add().SetName(atePort1.Name + ethName).SetMac(macAddr)
 		devDhcpEth1.Connection().SetPortName(port1.Name())
-		// ATE1 dhcp vlan
-		vlanName := fmt.Sprintf(".Vlan%d", i)
-		devDhcpEthVlan1 := devDhcpEth1.Vlans().Add().SetName(atePort1.Name + vlanName)
-		devDhcpEthVlan1.SetId(vlan100)
 		// ATE1  DHCP Client
 		dhcpName := fmt.Sprintf("DHCPv4Client%d", i)
 		dhcpclient := devDhcpEth1.Dhcpv4Interfaces().Add().
@@ -151,9 +146,6 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	//ATE2 dhcp ethernet
 	devDhcpServerEth := devDhcpServer1.Ethernets().Add().SetName(atePort2.Name + ".Eth").SetMac(atePort2.MAC)
 	devDhcpServerEth.Connection().SetPortName(port2.Name())
-	// // ATE2 dhcp vlan
-	devDhcpServerEthVlan := devDhcpServerEth.Vlans().Add().SetName(atePort2.Name + ".Vlan")
-	devDhcpServerEthVlan.SetId(vlan100)
 	// ATE2 dhcp IPv4
 	devDhcpServerIPv4 := devDhcpServerEth.Ipv4Addresses().Add().SetName(atePort2.Name + ".IPv4")
 	devDhcpServerIPv4.SetAddress(atePort2.IPv4).SetGateway("0.0.0.0").SetPrefix(uint32(atePort2.IPv4Len))
