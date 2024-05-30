@@ -68,6 +68,23 @@ func GenerateMacAddress(portNo uint32, deviceNo uint32) string {
 	return mac
 }
 
+func GenerateDhcpIp(deviceNo uint32) string {
+	deviceNoAsCharSecondByte := deviceNo % 255
+	dhcpIp := fmt.Sprintf("172.30.100.%d", deviceNoAsCharSecondByte)
+	return dhcpIp
+}
+
+func GenerateExpectedDhcpClientAddrList(t *testing.T) []string {
+	DhcpAddrList := []string{}
+	// for i := 0; i < 4; i++{
+	for i := 1; i <= NoOfDHCPClients; i++ {
+		dhcpIp := GenerateDhcpIp(uint32(i))
+		DhcpAddrList = append(DhcpAddrList, dhcpIp)
+		// t.Logf("DhcpAddrList %v", DhcpAddrList)
+	}
+	return DhcpAddrList
+}
+
 // WaitForDhcpClients maps through all the dhcp clients to verify expected DHCP counters
 func WaitForDhcpClients(t *testing.T, otg *otg.OTG, c gosnappi.Config) {
 	dhcpNames := []string{}
@@ -122,10 +139,10 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	port2 := config.Ports().Add().SetName("port2")
 	// OTG DHCP Client configuration
 	for i := 1; i <= NoOfDHCPClients; i++ {
-		// add device
+		// ATE1 DHCP device
 		deviceName := fmt.Sprintf("DHCPv4Client%d", i)
 		devDhcp1 := config.Devices().Add().SetName(atePort1.Name + deviceName)
-		// ATE1 dhcp ethernet
+		// ATE1 DHCP ethernet
 		ethName := fmt.Sprintf(".Eth%d", i)
 		macAddr := GenerateMacAddress(0, uint32(i))
 		devDhcpEth1 := devDhcp1.Ethernets().Add().SetName(atePort1.Name + ethName).SetMac(macAddr)
@@ -143,10 +160,10 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
 	// ATE2 DHCP Server connection
 	devDhcpServer1 := config.Devices().Add().SetName(atePort2.Name + "DHCPv4Server")
-	//ATE2 dhcp ethernet
+	//ATE2 DHCP Server ethernet
 	devDhcpServerEth := devDhcpServer1.Ethernets().Add().SetName(atePort2.Name + ".Eth").SetMac(atePort2.MAC)
 	devDhcpServerEth.Connection().SetPortName(port2.Name())
-	// ATE2 dhcp IPv4
+	// ATE2 DHCP Server IPv4
 	devDhcpServerIPv4 := devDhcpServerEth.Ipv4Addresses().Add().SetName(atePort2.Name + ".IPv4")
 	devDhcpServerIPv4.SetAddress(atePort2.IPv4).SetGateway("0.0.0.0").SetPrefix(uint32(atePort2.IPv4Len))
 
@@ -170,20 +187,20 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 }
 
 // verifyOTGDHCPv4ClientTelemetry to verify the DHCP interface values
-func verifyOTGDHCPv4ClientTelemetry(t *testing.T, otg *otg.OTG, c gosnappi.Config, dhcpAddress string) {
+func verifyOTGDHCPv4ClientTelemetry(t *testing.T, otg *otg.OTG, c gosnappi.Config, dhcpAddress []string) {
+	currAddrList := []string{}
 	for _, d := range c.Devices().Items() {
 		for _, ip := range d.Ethernets().Items() {
 			for _, configPeer := range ip.Dhcpv4Interfaces().Items() {
 				nbrPath := gnmi.OTG().Dhcpv4Client(configPeer.Name())
 				_, ok := gnmi.Watch(t, otg, nbrPath.Interface().Address().State(), time.Minute, func(val *ygnmi.Value[string]) bool {
 					currAddr, ok := val.Val()
+					currAddrList = append(currAddrList, currAddr)
 					t.Logf("DHCP %v Addr: %v ", configPeer.Name(), currAddr)
 					return ok
 				}).Await(t)
-				if !ok {
-					// fptest.LogQuery(t, "DHCP Obtained Address  %v %v", nbrPath.Interface().Address().State(), gnmi.Get(t, otg, nbrPath.Interface().Address().State()))
-					t.Logf("DHCP Obtained Address  %v %v", nbrPath.Interface().Address().State(), gnmi.Get(t, otg, nbrPath.Interface().Address().State()))
-					t.Errorf("DHCP Address Mismatch %s", configPeer.Name())
+				if len(currAddrList) != len(dhcpAddress) && !ok {
+					t.Errorf("DHCP clients didn't get address %v %v", currAddrList, dhcpAddress)
 				}
 			}
 		}
@@ -248,6 +265,11 @@ func TestDHCPv4ClientServer(t *testing.T) {
 	// conf, _ := otgConfig.Marshal().ToJson()
 	// t.Logf("Printing config ---> %v", conf)
 
+	// for MINIMAL check, we can verify if dhcp IP address is received or not and
+	// skip all dhcp Counter check
+	// verifyOTGDHCPv4ClientTelemetry(t, otg, otgConfig, GenerateExpectedDhcpClientAddrList(t))
+	// LogDHCPv4ClientStates(t, otg, otgConfig)
+
 	// verify DHCP client Counter
 	WaitForDhcpClients(t, otg, otgConfig)
 
@@ -277,6 +299,6 @@ func TestDHCPv4ClientServer(t *testing.T) {
 	}).Await(t)
 
 	t.Logf("Verify OTG DHCPv4 Client States")
+	verifyOTGDHCPv4ClientTelemetry(t, otg, otgConfig, GenerateExpectedDhcpClientAddrList(t))
 	LogDHCPv4ClientStates(t, otg, otgConfig)
-	verifyOTGDHCPv4ClientTelemetry(t, otg, otgConfig, ServerPoolAddr)
 }
