@@ -34,6 +34,23 @@ var (
 		IPv4Len: 24,
 		IPv6Len: 126,
 	}
+	atePort3 = attrs.Attributes{
+		Name:    "atePort3",
+		MAC:     "02:00:01:01:01:02",
+		IPv4:    "192.0.2.2",
+		IPv6:    "2001:db8::192:0:2:2",
+		IPv4Len: 24,
+		IPv6Len: 126,
+	}
+
+	atePort4 = attrs.Attributes{
+		Name:    "atePort4",
+		MAC:     "02:00:02:01:01:02",
+		IPv4:    "192.0.2.1",
+		IPv6:    "2001:db8::192:0:2:1",
+		IPv4Len: 24,
+		IPv6Len: 126,
+	}
 )
 
 func TestMain(m *testing.M) {
@@ -44,6 +61,8 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	config := gosnappi.NewConfig()
 	srcPort := config.Ports().Add().SetName("port1")
 	dstPort := config.Ports().Add().SetName("port2")
+	srcPort1 := config.Ports().Add().SetName("port3")
+	dstPort1 := config.Ports().Add().SetName("port4")
 	// config.Captures().Add().
 	// 	SetName("otg_cap").
 	// 	SetPortNames([]string{dstPort.Name()}).
@@ -64,6 +83,22 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	dstIpv4.SetAddress(atePort2.IPv4).SetGateway(atePort1.IPv4).SetPrefix(uint32(atePort2.IPv4Len))
 	dstIpv6 := dstEth.Ipv6Addresses().Add().SetName(atePort2.Name + ".IPv6")
 	dstIpv6.SetAddress(atePort2.IPv6).SetGateway(atePort1.IPv6).SetPrefix(uint32(atePort2.IPv6Len))
+
+	srcDev1 := config.Devices().Add().SetName(atePort3.Name)
+	srcEth1 := srcDev1.Ethernets().Add().SetName(atePort3.Name + ".Eth").SetMac(atePort3.MAC)
+	srcEth1.Connection().SetPortName(srcPort1.Name())
+	srcIpv41 := srcEth.Ipv4Addresses().Add().SetName(atePort3.Name + ".IPv4")
+	srcIpv41.SetAddress(atePort3.IPv4).SetGateway(atePort4.IPv4).SetPrefix(uint32(atePort3.IPv4Len))
+	srcIpv61 := srcEth1.Ipv6Addresses().Add().SetName(atePort3.Name + ".IPv6")
+	srcIpv61.SetAddress(atePort3.IPv6).SetGateway(atePort4.IPv6).SetPrefix(uint32(atePort3.IPv6Len))
+
+	dstDev1 := config.Devices().Add().SetName(atePort4.Name)
+	dstEth1 := dstDev1.Ethernets().Add().SetName(atePort4.Name + ".Eth").SetMac(atePort4.MAC)
+	dstEth1.Connection().SetPortName(dstPort1.Name())
+	dstIpv41 := dstEth1.Ipv4Addresses().Add().SetName(atePort4.Name + ".IPv4")
+	dstIpv41.SetAddress(atePort4.IPv4).SetGateway(atePort3.IPv4).SetPrefix(uint32(atePort4.IPv4Len))
+	dstIpv61 := dstEth1.Ipv6Addresses().Add().SetName(atePort4.Name + ".IPv6")
+	dstIpv61.SetAddress(atePort4.IPv6).SetGateway(atePort3.IPv6).SetPrefix(uint32(atePort4.IPv6Len))
 
 	// ATE Traffic Configuration
 	flowipv4 := config.Flows().Add().SetName("Flow-IPv4")
@@ -110,6 +145,10 @@ func TestOTGLink(t *testing.T) {
 	portStateAction.Port().Link().SetPortNames([]string{"port1"}).SetState(gosnappi.StatePortLinkState.DOWN)
 	ate.OTG().SetControlState(t, portStateAction)
 
+	portStateAction2 := gosnappi.NewControlState()
+	portStateAction2.Port().Link().SetPortNames([]string{"port3"}).SetState(gosnappi.StatePortLinkState.DOWN)
+	ate.OTG().SetControlState(t, portStateAction2)
+
 	startTime := time.Now()
 	gnmi.Get(t, otg, gnmi.OTG().Port("port1").State())
 
@@ -118,6 +157,12 @@ func TestOTGLink(t *testing.T) {
 		t.Logf("link state on port 2 is %s", linkState.String())
 		return present && linkState == otgtelemetry.Port_Link_DOWN
 	}).Await(t)
+	gnmi.Watch(t, otg, gnmi.OTG().Port("port4").Link().State(), 30*time.Second, func(val *ygnmi.Value[otgtelemetry.E_Port_Link]) bool {
+		linkState, present := val.Val()
+		t.Logf("link state on port 4 is %s", linkState.String())
+		return present && linkState == otgtelemetry.Port_Link_DOWN
+	}).Await(t)
+
 	newTime := time.Since(startTime)
 
 	t.Logf("time took for the link to go down %s", newTime)
@@ -128,11 +173,28 @@ func TestOTGLink(t *testing.T) {
 
 	gnmi.Watch(t, otg, gnmi.OTG().Port("port1").Link().State(), 30*time.Second, func(val *ygnmi.Value[otgtelemetry.E_Port_Link]) bool {
 		linkState, present := val.Val()
+		t.Logf("link state on port 1 is %s", linkState.String())
+		return present && linkState == otgtelemetry.Port_Link_UP
+	}).Await(t)
+	gnmi.Watch(t, otg, gnmi.OTG().Port("port2").Link().State(), 30*time.Second, func(val *ygnmi.Value[otgtelemetry.E_Port_Link]) bool {
+		linkState, present := val.Val()
 		t.Logf("link state on port 2 is %s", linkState.String())
+		return present && linkState == otgtelemetry.Port_Link_UP
+	}).Await(t)
+	gnmi.Watch(t, otg, gnmi.OTG().Port("port3").Link().State(), 30*time.Second, func(val *ygnmi.Value[otgtelemetry.E_Port_Link]) bool {
+		linkState, present := val.Val()
+		t.Logf("link state on port 3 is %s", linkState.String())
+		return present && linkState == otgtelemetry.Port_Link_UP
+	}).Await(t)
+	gnmi.Watch(t, otg, gnmi.OTG().Port("port4").Link().State(), 30*time.Second, func(val *ygnmi.Value[otgtelemetry.E_Port_Link]) bool {
+		linkState, present := val.Val()
+		t.Logf("link state on port 4 is %s", linkState.String())
 		return present && linkState == otgtelemetry.Port_Link_UP
 	}).Await(t)
 
 	portStateAction.Port().Link().SetPortNames([]string{"port1"}).SetState(gosnappi.StatePortLinkState.UP)
 	defer ate.OTG().SetControlState(t, portStateAction)
+	portStateAction2.Port().Link().SetPortNames([]string{"port3"}).SetState(gosnappi.StatePortLinkState.UP)
+	defer ate.OTG().SetControlState(t, portStateAction2)
 
 }
