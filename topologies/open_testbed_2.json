@@ -1,0 +1,54 @@
+{
+    "devices": [
+        {
+            "id": "d1",
+            "ports": [
+                {
+                    "id": "intf1",
+                    "speed": "S_400GB"
+                },
+                {
+                    "id": "intf2",
+                    "speed": "S_400GB"
+                }
+            ],
+            "role": "DUT"
+        },
+        {
+            "id": "d2",
+            "ports": [
+                {
+                    "id": "intf1",
+                    "speed": "S_400GB"
+                },
+                {
+                    "id": "intf2",
+                    "speed": "S_400GB"
+                }
+            ],
+            "role": "ATE"
+        }
+    ],
+    "links": [
+        {
+            "src": {
+                "device": "d1",
+                "port": "intf1"
+            },
+            "dst": {
+                "device": "d2",
+                "port": "intf1"
+            }
+        },
+        {
+            "src": {
+                "device": "d1",
+                "port": "intf2"
+            },
+            "dst": {
+                "device": "d2",
+                "port": "intf2"
+            }
+        }
+    ]
+}

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"github.com/open-traffic-generator/opentestbed/goopentestbed"
 	"github.com/open-traffic-generator/snappi/gosnappi"
 	"github.com/openconfig/gnoigo"
 	"github.com/openconfig/ondatra/binding"
@@ -60,6 +61,15 @@ type staticBind struct {
 	r          resolver
 	resv       *binding.Reservation
 	pushConfig bool
+}
+
+type openTestBind struct {
+	binding.Binding
+	r              resolver
+	resv           *binding.Reservation
+	pushConfig     bool
+	opentestbedapi goopentestbed.Api
+	sessionid      string
 }
 
 var _ binding.Binding = (*staticBind)(nil)
@@ -120,6 +130,38 @@ func (b *staticBind) Release(ctx context.Context) error {
 	return nil
 }
 
+func (ob *openTestBind) Reserve(ctx context.Context, tb *opb.Testbed, runTime, waitTime time.Duration, partial map[string]string) (*binding.Reservation, error) {
+	_ = runTime
+	_ = waitTime
+	_ = partial
+	if ob.resv != nil {
+		return nil, fmt.Errorf("only one reservation is allowed")
+	}
+	resv, err := reservation(ctx, tb, ob.r)
+	if err != nil {
+		return nil, err
+	}
+	resv.ID = resvID
+	ob.resv = resv
+
+	if ob.pushConfig {
+		if err := ob.reset(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	return resv, nil
+}
+
+func (ob *openTestBind) Release(ctx context.Context) error {
+	if ob.resv == nil {
+		return errors.New("no reservation")
+	}
+	ob.releaseOpenTestbed()
+	ob.resv = nil
+	return nil
+}
+
 func (b *staticBind) FetchReservation(_ context.Context, id string) (*binding.Reservation, error) {
 	_ = id
 	return nil, errors.New("static binding does not support fetching an existing reservation")
@@ -134,6 +176,23 @@ func (b *staticBind) reset(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (b *openTestBind) reset(ctx context.Context) error {
+	for _, dut := range b.resv.DUTs {
+		if sdut, ok := dut.(*staticDUT); ok {
+			if err := sdut.reset(ctx); err != nil {
+				return fmt.Errorf("could not reset device %s: %w", sdut.Name(), err)
+			}
+		}
+	}
+	return nil
+}
+
+func (b *openTestBind) releaseOpenTestbed() {
+	session := goopentestbed.NewSession()
+	session.SetId(b.sessionid)
+	b.opentestbedapi.Release(session)
 }
 
 func (d *staticDUT) Dialer(svc introspect.Service) (*introspect.Dialer, error) {

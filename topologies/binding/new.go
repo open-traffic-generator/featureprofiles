@@ -39,15 +39,15 @@ import (
 )
 
 var (
-	pluginFile         = flag.String("plugin", "", "vendor binding as a Go plugin")
-	pluginArgs         = flag.String("plugin-args", "", "arguments for the vendor binding")
-	bindingFile        = flag.String("binding", "", "static binding configuration file")
-	kneConfig          = flag.String("kne-config", "", "YAML configuration file")
-	pushConfig         = flag.Bool("push-config", true, "push device reset config supplied to static binding")
-	kneTopo            = flag.String("kne-topo", "", "KNE topology file")
-	kneSkipReset       = flag.Bool("kne-skip-reset", false, "skip the initial config reset phase when using KNE")
-	credFlags          = knecreds.DefineFlags()
-	dynamicbindingFile = flag.String("dynamic-binding", "", "go configuration file")
+	pluginFile      = flag.String("plugin", "", "vendor binding as a Go plugin")
+	pluginArgs      = flag.String("plugin-args", "", "arguments for the vendor binding")
+	bindingFile     = flag.String("binding", "", "static binding configuration file")
+	kneConfig       = flag.String("kne-config", "", "YAML configuration file")
+	pushConfig      = flag.Bool("push-config", true, "push device reset config supplied to static binding")
+	kneTopo         = flag.String("kne-topo", "", "KNE topology file")
+	kneSkipReset    = flag.Bool("kne-skip-reset", false, "skip the initial config reset phase when using KNE")
+	credFlags       = knecreds.DefineFlags()
+	opentestbedFile = flag.String("open-testbed", "", "go configuration file")
 )
 
 // New creates a new binding that could be either a vendor plugin, a
@@ -98,11 +98,8 @@ func newBind() (binding.Binding, error) {
 			SkipReset:   *kneSkipReset,
 		})
 	}
-	if *dynamicbindingFile != "" {
-		// api := goopentestbed.NewApi()
-		// api.NewHttpTransport().SetLocation("http://127.0.0.1:8080")
-		// output, _ := reserve.ReserveTestbed()
-		return dynamicBinding(*dynamicbindingFile)
+	if *opentestbedFile != "" {
+		return openTestbedBinding(*opentestbedFile)
 	}
 	if *kneConfig != "" {
 		glog.Warning("-kne-config flag is deprecated; use -kne-topo and credentials flags instead")
@@ -136,14 +133,15 @@ func loadBinding(path, args string) (binding.Binding, error) {
 	return newFn(args)
 }
 
-// dynamicBinding makes a static binding from the binding configuration file.
-func dynamicBinding(bindingFile string) (binding.Binding, error) {
+// openTestbedBinding makes a static binding from the open testbed configuration file.
+func openTestbedBinding(bindingFile string) (binding.Binding, error) {
 	in, err := os.ReadFile(bindingFile)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read binding file: %w", err)
 	}
+	host := os.Getenv("TESTBED_SERVICE")
 	api := goopentestbed.NewApi()
-	api.NewHttpTransport().SetLocation("http://127.0.0.1:8080")
+	api.NewHttpTransport().SetLocation(host)
 	testbed := goopentestbed.NewTestbed()
 	testbed.Unmarshal().FromJson(string(in))
 	b := &bindpb.Binding{}
@@ -159,10 +157,12 @@ func dynamicBinding(bindingFile string) (binding.Binding, error) {
 			return nil, fmt.Errorf("otg and ixnetwork are mutually exclusive, please configure one of them in ate %s binding", ate.Name)
 		}
 	}
-	return &staticBind{
-		Binding:    nil,
-		r:          resolver{b},
-		pushConfig: *pushConfig,
+	return &openTestBind{
+		Binding:        nil,
+		r:              resolver{b},
+		pushConfig:     *pushConfig,
+		opentestbedapi: api,
+		sessionid:      output.Sessionid(),
 	}, nil
 }
 
