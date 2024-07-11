@@ -2,6 +2,7 @@
     "devices": [
         {
             "id": "d1",
+            "vendor": "CISCO",
             "ports": [
                 {
                     "id": "intf1",

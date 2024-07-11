@@ -2,6 +2,7 @@
     "devices": [
         {
             "id": "d1",
+            "vendor": "NOKIA",
             "ports": [
                 {
                     "id": "intf1",
