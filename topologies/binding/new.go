@@ -47,7 +47,7 @@ var (
 	kneTopo         = flag.String("kne-topo", "", "KNE topology file")
 	kneSkipReset    = flag.Bool("kne-skip-reset", false, "skip the initial config reset phase when using KNE")
 	credFlags       = knecreds.DefineFlags()
-	opentestbedFile = flag.String("open-testbed", "", "go configuration file")
+	opentestbedFile = flag.String("open-testbed", "", "json configuration file")
 )
 
 // New creates a new binding that could be either a vendor plugin, a
@@ -134,10 +134,10 @@ func loadBinding(path, args string) (binding.Binding, error) {
 }
 
 // openTestbedBinding makes a static binding from the open testbed configuration file.
-func openTestbedBinding(bindingFile string) (binding.Binding, error) {
-	in, err := os.ReadFile(bindingFile)
+func openTestbedBinding(openTestFile string) (binding.Binding, error) {
+	in, err := os.ReadFile(openTestFile)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read binding file: %w", err)
+		return nil, fmt.Errorf("unable to read openTest file: %w", err)
 	}
 	host := os.Getenv("TESTBED_SERVICE")
 	api := goopentestbed.NewApi()
@@ -150,7 +150,7 @@ func openTestbedBinding(bindingFile string) (binding.Binding, error) {
 		return nil, err
 	}
 	if err := prototext.Unmarshal([]byte(output.Testbed()), b); err != nil {
-		return nil, fmt.Errorf("unable to parse binding file: %w", err)
+		return nil, fmt.Errorf("unable to parse generated binding file: %w", err)
 	}
 	for _, ate := range b.Ates {
 		if ate.Otg != nil && ate.Ixnetwork != nil {

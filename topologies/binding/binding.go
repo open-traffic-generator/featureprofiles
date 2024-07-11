@@ -178,8 +178,8 @@ func (b *staticBind) reset(ctx context.Context) error {
 	return nil
 }
 
-func (b *openTestBind) reset(ctx context.Context) error {
-	for _, dut := range b.resv.DUTs {
+func (ob *openTestBind) reset(ctx context.Context) error {
+	for _, dut := range ob.resv.DUTs {
 		if sdut, ok := dut.(*staticDUT); ok {
 			if err := sdut.reset(ctx); err != nil {
 				return fmt.Errorf("could not reset device %s: %w", sdut.Name(), err)
@@ -189,10 +189,10 @@ func (b *openTestBind) reset(ctx context.Context) error {
 	return nil
 }
 
-func (b *openTestBind) releaseOpenTestbed() {
+func (ob *openTestBind) releaseOpenTestbed() {
 	session := goopentestbed.NewSession()
-	session.SetId(b.sessionid)
-	b.opentestbedapi.Release(session)
+	session.SetId(ob.sessionid)
+	ob.opentestbedapi.Release(session)
 }
 
 func (d *staticDUT) Dialer(svc introspect.Service) (*introspect.Dialer, error) {
