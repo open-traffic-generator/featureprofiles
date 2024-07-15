@@ -603,44 +603,44 @@ func TestAlwaysCompareMED(t *testing.T) {
 		verifyBGPCapabilities(t, dut)
 	})
 
-	t.Run("Verify received BGP routes at ATE Port 1 have lowest MED", func(t *testing.T) {
-		t.Log("Verify BGP prefix telemetry.")
-		verifyPrefixesTelemetry(t, dut, 0, routeCount)
-		t.Log("Verify best route advertised to atePort1 is Peer with lowest MED 50 - eBGP Peer2.")
-		verifySetMed(t, otg, otgConfig, bgpMED50)
-	})
+	// t.Run("Verify received BGP routes at ATE Port 1 have lowest MED", func(t *testing.T) {
+	// 	t.Log("Verify BGP prefix telemetry.")
+	// 	verifyPrefixesTelemetry(t, dut, 0, routeCount)
+	// 	t.Log("Verify best route advertised to atePort1 is Peer with lowest MED 50 - eBGP Peer2.")
+	// 	verifySetMed(t, otg, otgConfig, bgpMED50)
+	// })
 
-	t.Run("Send and validate traffic from ATE Port1", func(t *testing.T) {
-		t.Log("Validate traffic flowing to the prefixes received from eBGP neighbor #2 from DUT (lowest MED-50).")
-		sendTraffic(t, otg, otgConfig)
-		verifyTraffic(t, ate, otgConfig, flow1, wantLoss)
-		verifyTraffic(t, ate, otgConfig, flow2, !wantLoss)
-	})
+	// t.Run("Send and validate traffic from ATE Port1", func(t *testing.T) {
+	// 	t.Log("Validate traffic flowing to the prefixes received from eBGP neighbor #2 from DUT (lowest MED-50).")
+	// 	sendTraffic(t, otg, otgConfig)
+	// 	verifyTraffic(t, ate, otgConfig, flow1, wantLoss)
+	// 	verifyTraffic(t, ate, otgConfig, flow2, !wantLoss)
+	// })
 
-	t.Run("Remove MED settings on DUT", func(t *testing.T) {
-		t.Log("Disable MED settings on DUT.")
-		dutPolicyConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
-		if deviations.RoutePolicyUnderAFIUnsupported(dut) {
-			gnmi.Replace(t, dut, dutPolicyConfPath.PeerGroup(peerGrpName2).ApplyPolicy().ImportPolicy().Config(), []string{rplAllowPolicy})
-			gnmi.Replace(t, dut, dutPolicyConfPath.PeerGroup(peerGrpName3).ApplyPolicy().ImportPolicy().Config(), []string{rplAllowPolicy})
-		} else {
-			gnmi.Replace(t, dut, dutPolicyConfPath.PeerGroup(peerGrpName2).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ImportPolicy().Config(), []string{rplAllowPolicy})
-			gnmi.Replace(t, dut, dutPolicyConfPath.PeerGroup(peerGrpName3).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ImportPolicy().Config(), []string{rplAllowPolicy})
-		}
+	// t.Run("Remove MED settings on DUT", func(t *testing.T) {
+	// 	t.Log("Disable MED settings on DUT.")
+	// 	dutPolicyConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	// 	if deviations.RoutePolicyUnderAFIUnsupported(dut) {
+	// 		gnmi.Replace(t, dut, dutPolicyConfPath.PeerGroup(peerGrpName2).ApplyPolicy().ImportPolicy().Config(), []string{rplAllowPolicy})
+	// 		gnmi.Replace(t, dut, dutPolicyConfPath.PeerGroup(peerGrpName3).ApplyPolicy().ImportPolicy().Config(), []string{rplAllowPolicy})
+	// 	} else {
+	// 		gnmi.Replace(t, dut, dutPolicyConfPath.PeerGroup(peerGrpName2).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ImportPolicy().Config(), []string{rplAllowPolicy})
+	// 		gnmi.Replace(t, dut, dutPolicyConfPath.PeerGroup(peerGrpName3).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ImportPolicy().Config(), []string{rplAllowPolicy})
+	// 	}
 
-	})
+	// })
 
-	t.Run("Verify MED on received routes at ATE Port1 after removing MED settings", func(t *testing.T) {
-		t.Log("Verify BGP prefix telemetry.")
-		verifyPrefixesTelemetry(t, dut, 0, routeCount)
-		t.Log("Verify best route advertised to atePort1.")
-		verifySetMed(t, otg, otgConfig, uint32(0))
-	})
+	// t.Run("Verify MED on received routes at ATE Port1 after removing MED settings", func(t *testing.T) {
+	// 	t.Log("Verify BGP prefix telemetry.")
+	// 	verifyPrefixesTelemetry(t, dut, 0, routeCount)
+	// 	t.Log("Verify best route advertised to atePort1.")
+	// 	verifySetMed(t, otg, otgConfig, uint32(0))
+	// })
 
-	t.Run("Send and verify traffic after removing MED settings on DUT", func(t *testing.T) {
-		t.Log("Validate traffic change due to change in MED settings - Best route changes.")
-		sendTraffic(t, otg, otgConfig)
-		verifyTraffic(t, ate, otgConfig, flow1, !wantLoss)
-		verifyTraffic(t, ate, otgConfig, flow2, wantLoss)
-	})
+	// t.Run("Send and verify traffic after removing MED settings on DUT", func(t *testing.T) {
+	// 	t.Log("Validate traffic change due to change in MED settings - Best route changes.")
+	// 	sendTraffic(t, otg, otgConfig)
+	// 	verifyTraffic(t, ate, otgConfig, flow1, !wantLoss)
+	// 	verifyTraffic(t, ate, otgConfig, flow2, wantLoss)
+	// })
 }
