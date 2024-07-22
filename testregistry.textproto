@@ -220,6 +220,11 @@ test: {
   readme: "https://github.com/openconfig/featureprofiles/blob/main/feature/qos/otg_tests/qos_output_queue_counters_test/README.md"
 }
 test: {
+  id: "DP-1.5"
+  description: "Egress Strict Priority scheduler with bursty traffic"
+  readme: "https://github.com/openconfig/featureprofiles/blob/main/feature/qos/otg_tests/egress_strict_priority_scheduler_with_bursty_traffic_test/README.md"
+}
+test: {
   id: "DP-1.7"
   description: "One strict priority queue traffic test"
   readme: "https://github.com/openconfig/featureprofiles/blob/main/feature/qos/ate_tests/one_sp_queue_traffic_test/README.md"
@@ -377,6 +382,18 @@ test: {
   exec: " "
 }
 test: {
+  id: "RT-1.17"
+  description: "RT-1.17: BGP route-refresh capability"
+  readme: ""
+  exec: " "
+}
+test: {
+  id: "RT-1.18"
+  description: "RT-1.18: Support for MP-BGP w/ Multiple AFI-SAFI Tuples on a single neighborship"
+  readme: ""
+  exec: " "
+}
+test: {
   id: "RT-1.2"
   description: "BGP Policy & Route Installation"
   readme: "https://github.com/openconfig/featureprofiles/blob/main/feature/bgp/policybase/otg_tests/route_installation_test/README.md"
@@ -493,6 +510,12 @@ test: {
   id: "RT-1.52"
   description: "BGP multipath ECMP support with Link Bandwidth Community"
   readme: "https://github.com/openconfig/featureprofiles/blob/main/feature/bgp/multipath/otg_tests/bgp_multipath_wecmp_lbw_community_test/README.md"
+  exec: " "
+}
+test: {
+  id: "RT-1.53"
+  description: "Prefix-set test"
+  readme: "https://github.com/openconfig/featureprofiles/blob/main/feature/experimental/policy/prefix_set/README.md"
   exec: " "
 }
 test: {
