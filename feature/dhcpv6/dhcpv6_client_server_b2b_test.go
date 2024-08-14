@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 // The testbed consists of ate:port1 -> ate:port2
 //
 // RUN cmd:
-// go test -v feature/dhcp/dhcpv6_client_server_b2b_test.go \
+// go test -v feature/dhcpv6/dhcpv6_client_server_b2b_test.go \
 // -binding $HOME/featuresprofile-ci/otg-b2b/otg-otg.binding \
 // -testbed $HOME/featuresprofile-ci/otg-b2b/otg-otg.testbed
 
