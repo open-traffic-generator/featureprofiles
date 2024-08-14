@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 
 const (
 	NetworkInstance = "default"
-	ServerPoolAddr  = "22000:0:0:100::1"
+	ServerPoolAddr  = "2000:0:0:100::1"
 	NoOfDHCPClients = 10
 )
 
