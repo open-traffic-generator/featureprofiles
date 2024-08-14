@@ -53,7 +53,7 @@ var (
 	}
 	atePort2 = attrs.Attributes{
 		Name:    "AtePort2",
-		IPv6:    "12000:0:0:1::2",
+		IPv6:    "2000:0:0:1::2",
 		MAC:     "00:03:01:01:01:01",
 		IPv4Len: 64,
 	}
