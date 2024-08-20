@@ -173,7 +173,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	d1Dhcpv6ServerPool.SetLeaseTime(3600)
 	IaType := d1Dhcpv6ServerPool.IaType().Iana()
 	IaType.
-		SetPrefix(64).
+		SetPrefixLen(64).
 		SetStartAddress(ServerPoolAddr).
 		SetStep(1).
 		SetSize(NoOfDHCPClients)
@@ -213,11 +213,12 @@ func LogDHCPv6ClientStates(t testing.TB, otg *otg.OTG, c gosnappi.Config) {
 	fmt.Fprintln(&out, strings.Repeat("-", 120))
 	out.WriteString("\n")
 	fmt.Fprintf(&out,
-		"%-15s%-18s%-18s%-18s%-18s%-18s%-18s\n",
+		"%-15s%-18s%-18s%-18v%-18s%-18s%-18s%-18s\n",
 		"DHCPv6 Client",
 		"IPv6 Address",
 		"Gateway Address",
-		"Prefix Length",
+		"IAPD Prefix Address",
+		"IAPD Prefix Length",
 		"Lease Time",
 		"Renew Time",
 		"Rebind Time")
@@ -228,15 +229,16 @@ func LogDHCPv6ClientStates(t testing.TB, otg *otg.OTG, c gosnappi.Config) {
 				dhcpState := gnmi.Lookup(t, otg, gnmi.OTG().Dhcpv6Client(dhcp.Name()).Interface().State())
 				v, isPresent := dhcpState.Val()
 				if isPresent {
-					ipv4addr := v.GetAddress()
+					ipv6addr := v.GetAddress()
 					gatewayAddr := v.GetGatewayAddress()
-					prefix := v.GetPrefixLength()
+					iapdAddr := v.GetIapdAddress()
+					iapdPrefix := v.GetIapdPrefixLength()
 					leaseTime := v.GetLeaseTime()
 					renewTime := v.GetRenewTime()
 					rebindTime := v.GetRebindTime()
 					out.WriteString(fmt.Sprintf(
-						"%-15v%-18s%-18s%-18v%-18v%-18v%-18v\n",
-						dhcp.Name(), ipv4addr, gatewayAddr, prefix, leaseTime, renewTime, rebindTime,
+						"%-15v%-18s%-18s%-18v%-18v%-18v%-18v%-18v\n",
+						dhcp.Name(), ipv6addr, gatewayAddr, iapdAddr, iapdPrefix, leaseTime, renewTime, rebindTime,
 					))
 				}
 			}
