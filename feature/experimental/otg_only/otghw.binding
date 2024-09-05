@@ -25,10 +25,10 @@ ates {
   # from its topology ID to the actual port name on the device.
   ports {
     id: "port1"
-    name: "10.36.84.12;6;1"  # Change this to the ixia-c-hw port location.
+    name: "10.24.50.12;1;7"  # Change this to the ixia-c-hw port location.
   }
   ports {
     id: "port2"
-    name: "10.36.84.12;6;2"  # Change this to the ixia-c-hw port location.
+    name: "10.24.50.12;1;8"  # Change this to the ixia-c-hw port location.
   }
 }
