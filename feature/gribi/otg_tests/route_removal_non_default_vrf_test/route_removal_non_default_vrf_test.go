@@ -154,6 +154,7 @@ func TestRouteRemovalNonDefaultVRFFlush(t *testing.T) {
 	t.Log("Inject an IPv4Entry for 198.51.100.0/24 into VRF-1, with its referenced NHG and NH in the default routing-instance pointing to ATE port-2")
 	// clientA is primary client.
 	injectEntries(ctx, t, dut, clientA, nonDefaultVRF, ateDstNetEntryNonDefault)
+	verifyAFT(ctx, t, dut, nonDefaultVRF, ateDstNetEntryNonDefault)
 
 	t.Run("flushNonDefaultVrfclientA", func(t *testing.T) {
 		t.Log("Flush request from clientA (the primary client) non default VRF should succeed.")
@@ -163,6 +164,7 @@ func TestRouteRemovalNonDefaultVRFFlush(t *testing.T) {
 	t.Log("Re-inject entry for 198.51.100.0/24 in VRF-1 from gRIBI-A")
 	injectEntries(ctx, t, dut, clientA, nonDefaultVRF, ateDstNetEntryNonDefault)
 
+	verifyAFT(ctx, t, dut, nonDefaultVRF, ateDstNetEntryNonDefault)
 	t.Run("flushNonDefaultVrfclientB", func(t *testing.T) {
 		t.Log("Flush request from clientB (not a primary client) non default VRF should fail.")
 		flushNonDefaultVrfSecondary(ctx, t, dut, clientB, ate, ateTop)
@@ -372,21 +374,21 @@ func sendTraffic(t *testing.T, ate *ondatra.ATEDevice, config gosnappi.Config) {
 	ate.OTG().StartTraffic(t)
 	time.Sleep(15 * time.Second)
 	ate.OTG().StopTraffic(t)
-	otgutils.LogFlowMetrics(t, ate.OTG(), config)
+
 }
 
 // computeLossPct checks for traffic packet loss.
 func computeLossPct(t *testing.T, ate *ondatra.ATEDevice, config gosnappi.Config) float32 {
 	t.Helper()
-	flowMetric := gnmi.Get(t, ate.OTG(), gnmi.OTG().Flow("Flow").State())
-	txPackets := float32(flowMetric.GetCounters().GetOutPkts())
-	if txPackets == 0 {
-		t.Fatal("No tx packets")
-	}
-	rxPackets := float32(flowMetric.GetCounters().GetInPkts())
-	lossPct := (txPackets - rxPackets) * 100 / txPackets
+
+	otg := ate.OTG()
+	txPkts, rxPkts := otgutils.GetFlowStats(t, otg, "Flow", 5*time.Second)
+	otgutils.LogFlowMetrics(t, ate.OTG(), config)
+	lossPct := float32(txPkts-rxPkts) * 100 / float32(txPkts)
 	return lossPct
 }
+
+// testArgs holds the objects needed by the test case.
 
 // hasIPv4Entry checks if the entry is active through AFT Telemetry.
 func hasIPv4Entry(t *testing.T, dut *ondatra.DUTDevice, networkInstanceName string, ateDstNetCIDR string) bool {
@@ -401,6 +403,18 @@ func injectEntries(ctx context.Context, t *testing.T, dut *ondatra.DUTDevice, cl
 	client.AddNH(t, nhIndex, atePort2.IPv4, deviations.DefaultNetworkInstance(dut), fluent.InstalledInRIB)
 	client.AddNHG(t, nhgIndex, map[uint64]uint64{nhIndex: 1}, deviations.DefaultNetworkInstance(dut), fluent.InstalledInRIB)
 	client.AddIPv4(t, ateDstNetCIDR, nhgIndex, networkInstanceName, deviations.DefaultNetworkInstance(dut), fluent.InstalledInRIB)
+}
+
+func verifyAFT(ctx context.Context, t *testing.T, dut *ondatra.DUTDevice, networkInstanceName string, ateDstNetCIDR string) {
+	t.Logf("Verify through AFT Telemetry that %s is active", ateDstNetCIDR)
+	// ipv4Path := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Afts().Ipv4Entry(ateDstNetCIDR)
+	ipv4Path := gnmi.OC().NetworkInstance(networkInstanceName).Afts().Ipv4Entry(ateDstNetCIDR)
+	if got, ok := gnmi.Watch(t, dut, ipv4Path.State(), time.Minute, func(val *ygnmi.Value[*oc.NetworkInstance_Afts_Ipv4Entry]) bool {
+		ipv4Entry, present := val.Val()
+		return present && ipv4Entry.GetPrefix() == ateDstNetCIDR
+	}).Await(t); !ok {
+		t.Errorf("ipv4-entry/state/prefix got %v, want %s", got, ateDstNetCIDR)
+	}
 }
 
 // injectIPEntry adds only IPv4 entry to the specified network instance referencing to the nhgid, to the VRF.
