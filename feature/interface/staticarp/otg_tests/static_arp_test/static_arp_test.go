@@ -66,7 +66,7 @@ const (
 	plen4 = 30
 	plen6 = 126
 
-	poisonedMAC = "12:34:56:78:7a:69" // 0xa69 = 2665
+	poisonedMAC = "12:34:56:78:02:69" // 0xa69 = 2665
 	noStaticMAC = ""
 )
 
@@ -186,7 +186,7 @@ func configureATE(t *testing.T) gosnappi.Config {
 	return config
 }
 
-// Extract the hex equivalent last 12 bits
+// Extract the hex equivalent last 10 bits
 func getMacFilter(mac string) string {
 	newMac := strings.Replace(mac, ":", "", -1)
 	return "0x" + newMac[9:]
@@ -244,7 +244,7 @@ func testFlow(
 	flow.Size().SetFixed(100)
 	eth := flow.EgressPacket().Add().Ethernet()
 	ethTag := eth.Dst().MetricTags().Add()
-	ethTag.SetName("EgressTrackingFlow").SetOffset(36).SetLength(12)
+	ethTag.SetName("EgressTrackingFlow").SetOffset(38).SetLength(10)
 	otg.PushConfig(t, config)
 	otg.StartProtocols(t)
 
@@ -286,7 +286,7 @@ func testFlow(
 			if got := ets[0].GetCounters().GetInPkts(); got != rxPkts {
 				t.Errorf("EgressTracking counter in-pkts got %d, want %d", got, rxPkts)
 			} else {
-				t.Logf("Received %d packets with %s as the last 12 bits in the dst MAC", got, macFilter)
+				t.Logf("Received %d packets with %s as the last 10 bits in the dst MAC", got, macFilter)
 			}
 		}
 	}

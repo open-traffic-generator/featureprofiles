@@ -699,9 +699,9 @@ func TestOneSPQueueTraffic(t *testing.T) {
 			t.Logf("Running traffic 2 on DUT interfaces: %s => %s ", dp2.Name(), dp3.Name())
 			t.Logf("Sending traffic flows: \n%v\n\n", trafficFlows)
 			ate.OTG().StartTraffic(t)
-			time.Sleep(30 * time.Second)
+			time.Sleep(10 * time.Second)
 			ate.OTG().StopTraffic(t)
-			time.Sleep(30 * time.Second)
+			time.Sleep(10 * time.Second)
 
 			otgutils.LogFlowMetrics(t, ate.OTG(), top)
 			for trafficID, data := range trafficFlows {
