@@ -516,6 +516,8 @@ func TestStaticToISISRedistribution(t *testing.T) {
 					ts.ATE.OTG().StartTraffic(t)
 					time.Sleep(trafficDuration)
 					ts.ATE.OTG().StopTraffic(t)
+					otgutils.LogPortMetrics(t, ts.ATE.OTG(), ts.ATETop)
+					otgutils.LogFlowMetrics(t, ts.ATE.OTG(), ts.ATETop)
 
 					for _, flow := range tc.trafficFlows {
 						loss := otgutils.GetFlowLossPct(t, ts.ATE.OTG(), flow, 20*time.Second)

@@ -475,6 +475,7 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.Config) map[
 	time.Sleep(1 * time.Minute)
 	ate.OTG().StopTraffic(t)
 
+	otgutils.LogPortMetrics(t, ate.OTG(), top)
 	otgutils.LogFlowMetrics(t, ate.OTG(), top)
 
 	recvMetric := gnmi.Get(t, ate.OTG(), gnmi.OTG().Flow(flowipv4.Name()).State())

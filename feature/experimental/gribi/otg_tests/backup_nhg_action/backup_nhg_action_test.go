@@ -523,6 +523,7 @@ func validateTrafficFlows(t *testing.T, ate *ondatra.ATEDevice, good []gosnappi.
 	time.Sleep(15 * time.Second)
 	ate.OTG().StopTraffic(t)
 	time.Sleep(10 * time.Second)
+	otgutils.LogPortMetrics(t, ate.OTG(), top)
 	otgutils.LogFlowMetrics(t, ate.OTG(), top)
 
 	for _, flow := range good {
