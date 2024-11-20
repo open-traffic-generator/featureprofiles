@@ -7,3 +7,12 @@ openconfig_public/
 # used by `make proto/...`
 protobuf-import/
 *.log
+pcap*
+*.pcap
+logs_cisco_uhd/
+logs_cisco_dev_uhd2/
+logs_cisco_dev_uhd3/
+logs_cisco_lag_uhd/results.csv
+logs_cisco_lag_uhd1/results.csv
+logs_cisco_dev_uhd/results.csv
+feature/experimental/gribi/otg_tests/backup_nhg_action/backup_nhg_action_cap_test.go.uuu

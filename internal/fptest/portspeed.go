@@ -43,7 +43,8 @@ var portSpeed = map[ondatra.Speed]oc.E_IfEthernet_ETHERNET_SPEED{
 // SetPortSpeed sets the DUT config for the interface port-speed according
 // to ondatra.Prot.Speed()
 func SetPortSpeed(t testing.TB, p *ondatra.Port) {
-	speed, ok := portSpeed[p.Speed()]
+	// speed, ok := portSpeed[p.Speed()]
+	speed, ok := portSpeed[ondatra.Speed100Gb]
 	if !ok {
 		// Port speed is unspecified or unrecognized. Explicit config not performed
 		return
@@ -55,7 +56,7 @@ func SetPortSpeed(t testing.TB, p *ondatra.Port) {
 
 // GetIfSpeed returns an explicit speed of an interface in OC format
 func GetIfSpeed(t *testing.T, p *ondatra.Port) oc.E_IfEthernet_ETHERNET_SPEED {
-	speed, ok := portSpeed[p.Speed()]
+	speed, ok := portSpeed[ondatra.Speed100Gb]
 	if !ok {
 		t.Logf("Explicit port speed %v was not found in the map", speed)
 		return 0
