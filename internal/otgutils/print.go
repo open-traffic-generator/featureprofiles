@@ -37,14 +37,14 @@ func LogFlowMetrics(t testing.TB, otg *otg.OTG, c gosnappi.Config) {
 	out.WriteString("\nOTG Flow Metrics\n")
 	fmt.Fprintln(&out, strings.Repeat("-", 80))
 	out.WriteString("\n")
-	fmt.Fprintf(&out, "%-25v%-15v%-15v%-15v%-15v\n", "Name", "Frames Tx", "Frames Rx", "FPS Tx", "FPS Rx")
+	fmt.Fprintf(&out, "%-35v%-15v%-15v%-15v%-15v\n", "Name", "Frames Tx", "Frames Rx", "FPS Tx", "FPS Rx")
 	for _, f := range c.Flows().Items() {
 		flowMetrics := gnmi.Get(t, otg, gnmi.OTG().Flow(f.Name()).State())
 		rxPkts := flowMetrics.GetCounters().GetInPkts()
 		txPkts := flowMetrics.GetCounters().GetOutPkts()
 		rxRate := ygot.BinaryToFloat32(flowMetrics.GetInFrameRate())
 		txRate := ygot.BinaryToFloat32(flowMetrics.GetOutFrameRate())
-		out.WriteString(fmt.Sprintf("%-25v%-15v%-15v%-15v%-15v\n", f.Name(), txPkts, rxPkts, txRate, rxRate))
+		out.WriteString(fmt.Sprintf("%-35v%-15v%-15v%-15v%-15v\n", f.Name(), txPkts, rxPkts, txRate, rxRate))
 	}
 	fmt.Fprintln(&out, strings.Repeat("-", 80))
 	out.WriteString("\n\n")
