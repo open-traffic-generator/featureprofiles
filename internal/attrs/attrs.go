@@ -46,6 +46,7 @@ type Attributes struct {
 	IPv6Len      uint8  // Prefix length for IPv6.
 	MTU          uint16
 	ID           uint32 // /interfaces/interface/state/id p4rt interface id
+	RouteCount   uint32 // route count 
 }
 
 // IPv4CIDR constructs the IPv4 CIDR notation with the given prefix
