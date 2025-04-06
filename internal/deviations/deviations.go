@@ -1328,7 +1328,12 @@ func LoadIntervalNotSupported(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetLoadIntervalNotSupported()
 }
 
-// PolicyForwardingToNextHopUnsupported returns true if policy forwarding to next hop is not supported on vendors
-func PolicyForwardingToNextHopUnsupported(dut *ondatra.DUTDevice) bool {
-	return lookupDUTDeviations(dut).GetPolicyForwardingToNextHopUnsupported()
+// SkipOpticalChannelOutputPowerInterval returns true if devices do not support opticalchannel output-power interval leaf
+func SkipOpticalChannelOutputPowerInterval(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetSkipOpticalChannelOutputPowerInterval()
+}
+
+// SkipTransceiverDescription returns true if devices do not support transceiver description leaf
+func SkipTransceiverDescription(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetSkipTransceiverDescription()
 }
