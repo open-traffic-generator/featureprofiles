@@ -1327,3 +1327,8 @@ func GreGueTunnelInterfaceOcUnsupported(dut *ondatra.DUTDevice) bool {
 func LoadIntervalNotSupported(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetLoadIntervalNotSupported()
 }
+
+// PolicyForwardingToNextHopUnsupported returns true if policy forwarding to next hop is not supported on vendors
+func PolicyForwardingToNextHopUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetPolicyForwardingToNextHopUnsupported()
+}

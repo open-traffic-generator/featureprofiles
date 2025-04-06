@@ -715,6 +715,9 @@ message Metadata {
     // Cisco b/390502067
     bool sr_igp_config_unsupported = 260;
 
+    // Devices that do not support policy forwarding on next-hop
+    bool policy_forwarding_to_next_hop_unsupported = 266;
+
     // Cisco: b/404301960
     // Devices that block one IS-IS level specific authentication config attribute for P2P links. 
     // The same leafs can be set directly under ISIS Interface authentication /network-instances/network-instance/protocols/protocol/isis/interfaces/interface/authentication.

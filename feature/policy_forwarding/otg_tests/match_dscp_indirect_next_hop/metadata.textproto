@@ -1,0 +1,16 @@
+# proto-file: github.com/openconfig/featureprofiles/proto/metadata.proto
+# proto-message: Metadata
+
+uuid: "yet-to-generate"
+description: "policy-forwarding to indirect NH matching DSCP/TC."
+testbed: TESTBED_DUT_ATE_4LINKS
+platform_exceptions: {
+  platform: {
+    vendor: ARISTA
+  }
+  deviations: {
+    interface_enabled: true
+    default_network_instance: "default"
+    policy_forwarding_to_next_hop_unsupported: true
+  }
+}
