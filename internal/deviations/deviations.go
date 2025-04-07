@@ -1327,3 +1327,18 @@ func GreGueTunnelInterfaceOcUnsupported(dut *ondatra.DUTDevice) bool {
 func StaticMplsLspUnsupported(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetStaticMplsLspUnsupported()
 }
+
+// LoadIntervalNotSupported returns true if load interval is not supported on vendors
+func LoadIntervalNotSupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetLoadIntervalNotSupported()
+}
+
+// SkipOpticalChannelOutputPowerInterval returns true if devices do not support opticalchannel output-power interval leaf
+func SkipOpticalChannelOutputPowerInterval(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetSkipOpticalChannelOutputPowerInterval()
+}
+
+// SkipTransceiverDescription returns true if devices do not support transceiver description leaf
+func SkipTransceiverDescription(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetSkipTransceiverDescription()
+}

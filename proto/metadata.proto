@@ -722,6 +722,17 @@ message Metadata {
     // Devices that do not support GRE/GUE tunnel interface oc.
     // Juniper b/398171114
     bool gre_gue_tunnel_interface_oc_unsupported = 262;
+    
+    // Devices that do not support load-interval configuration
+    bool load_interval_not_supported = 263;
+
+    // SkipOpticalChannelOutputPowerInterval for devices that do not support optical-channel/output-power/interval leaf
+    // Nokia b/394622454
+    bool skip_optical_channel_output_power_interval = 264;
+
+    // SkipTransceiverDescription for devices that do not support transceiver/description leaf
+    // Nokia b/394622453
+    bool skip_transceiver_description = 265;
 
     // Devices does not support static mpls lsp
     bool static_mpls_lsp_unsupported = 263;
