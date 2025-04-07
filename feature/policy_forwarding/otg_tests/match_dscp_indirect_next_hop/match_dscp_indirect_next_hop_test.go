@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package match_dscp_indirect_next_hop_test implements PF-1.1: IPv4/IPv6 policy-forwarding to indirect NH matching DSCP/TC.
 package match_dscp_indirect_next_hop_test
 
 import (
@@ -39,12 +40,6 @@ func TestMain(m *testing.M) {
 	fptest.RunTests(m)
 }
 
-// TODO:
-// Add description
-// Check Camelcase
-// Add Log Messages
-// Loop over DSCP values to create DUT OC Config
-
 const (
 	advertisedRoutesv4Prefix = 32
 	advertisedRoutesv6Prefix = 128
@@ -55,10 +50,6 @@ const (
 	rplName                  = "ALLOW"
 	peerGrpNamev4            = "BGP-PEER-GROUP-V4"
 	peerGrpNamev6            = "BGP-PEER-GROUP-V6"
-	peerGrpNamev4P1          = "BGP-PEER-GROUP-V4-P1"
-	peerGrpNamev6P1          = "BGP-PEER-GROUP-V6-P1"
-	peerGrpNamev4P2          = "BGP-PEER-GROUP-V4-P2"
-	peerGrpNamev6P2          = "BGP-PEER-GROUP-V6-P2"
 	RouteCount               = uint32(1)
 	ateAS                    = 123
 	ipvNHv4                  = "202.0.113.1"
@@ -66,12 +57,13 @@ const (
 	ipv4Dst                  = "100.100.100.0"
 	ipv6Dst                  = "2001:2:1::0"
 	lossTolerance            = 1
-	bgpV4RouteName           = "BGP4.peerv4route"
-	bgpV6RouteName           = "BGP6.peerv4route"
+	bgpV4RouteName           = "BGP4-PEER-v4ROUTE"
+	bgpV6RouteName           = "BGP6-PEER-v6ROUTE"
 	pfFlow                   = "PF-FLOW"
-	defaultFlow              = "Default-Flow"
+	defaultFlow              = "DEFAULT-FLOW"
 	pfFlowv6                 = "PF-FLOW-V6"
-	defaultFlowV6            = "Default-Flow-V6"
+	defaultFlowV6            = "DEFAULT-FLOW-V6"
+	trafficPolicyName        = "BG_PBR_TRAFFIC_POLICY"
 )
 
 var (
@@ -156,9 +148,11 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 	i3 := dutP3.NewOCInterface(p3, dut)
 	gnmi.Replace(t, dut, dc.Interface(p3).Config(), i3)
 
+	t.Log("Configure Static Routes IPV4-DST1/IPV6-DST1 towards ATE port 3")
 	configureDUTStatic(t, dut)
 
-	configTrafficPolicy(t, dut)
+	t.Log("PF action is to redirect to BGP-announced next-hops (IPV-NH-V4/IPV-NH-V6)")
+	configTrafficPolicy(t, dut, trafficPolicyName)
 }
 
 func buildCliConfigRequest(config string) *gpb.SetRequest {
@@ -180,7 +174,7 @@ func buildCliConfigRequest(config string) *gpb.SetRequest {
 	return gpbSetRequest
 }
 
-func configTrafficPolicy(t *testing.T, dut *ondatra.DUTDevice) {
+func configTrafficPolicy(t *testing.T, dut *ondatra.DUTDevice, name string) {
 
 	interfaceName := dut.Port(t, "port1").Name()
 
@@ -192,41 +186,51 @@ func configTrafficPolicy(t *testing.T, dut *ondatra.DUTDevice) {
 		if _, err := gnmiClient.Set(context.Background(), gpbSetRequest); err != nil {
 			t.Fatalf("gnmiClient.Set() with unexpected error: %v", err)
 		}
+	} else {
+		d := &oc.Root{}
+		ni1 := d.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+		npf := ni1.GetOrCreatePolicyForwarding()
+		np := npf.GetOrCreatePolicy(name)
+		np.PolicyId = ygot.String(name)
+		np.Type = oc.Policy_Type_PBR_POLICY
+
+		for i, dscp := range pfMatchingDscpValues {
+			npRule := np.GetOrCreateRule(uint32(i + 1))
+			ip := npRule.GetOrCreateIpv4()
+			ip.SourceAddress = ygot.String(fmt.Sprintf("%s/32", ateP1.IPv4))
+			ip.DestinationAddress = ygot.String(fmt.Sprintf("%s/32", ipv4Dst))
+			ip.Dscp = ygot.Uint8(uint8(dscp))
+			npRuleAction := npRule.GetOrCreateAction()
+			npRuleAction.NextHop = ygot.String(ipvNHv4)
+		}
+
+		for i, dscp := range pfMatchingDscpValues {
+			npRule := np.GetOrCreateRule(uint32(i+1) + uint32(len(pfMatchingDscpValues)))
+			ip := npRule.GetOrCreateIpv6()
+			ip.SourceAddress = ygot.String(fmt.Sprintf("%s/128", ateP1.IPv6))
+			ip.DestinationAddress = ygot.String(fmt.Sprintf("%s/128", ipv6Dst))
+			ip.Dscp = ygot.Uint8(uint8(dscp))
+			npRuleAction := npRule.GetOrCreateAction()
+			npRuleAction.NextHop = ygot.String(ipvNHv6)
+		}
+
+		ifName := dut.Port(t, "port1").Name()
+		npi := npf.GetOrCreateInterface(ifName)
+		npi.ApplyForwardingPolicy = np.PolicyId
+		gnmi.Update(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Config(), ni1)
+
+		json, err := ygot.EmitJSON(ni1, &ygot.EmitJSONConfig{
+			Format: ygot.RFC7951,
+			Indent: "  ",
+			RFC7951Config: &ygot.RFC7951JSONConfig{
+				AppendModuleName: true,
+			},
+		})
+		if err != nil {
+			t.Errorf("Error decoding sampling config: %v", err)
+		}
+		t.Logf("Got sampling config: %v", json)
 	}
-
-	// d := &oc.Root{}
-	// ni1 := d.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-	// npf := ni1.GetOrCreatePolicyForwarding()
-	// np := npf.GetOrCreatePolicy(name)
-	// np.PolicyId = ygot.String(name)
-	// np.Type = oc.Policy_Type_PBR_POLICY
-
-	// npRule := np.GetOrCreateRule(10)
-	// ip := npRule.GetOrCreateIpv4()
-	// ip.SourceAddress = ygot.String("192.1.1.1/32")
-	// ip.DestinationAddress = ygot.String("100.100.100.100/32")
-	// ip.Dscp = ygot.Uint8(10)
-
-	// npRuleAction := npRule.GetOrCreateAction()
-	// npRuleAction.NextHop = ygot.String("203.1.1.1")
-
-	// ifName := dut.Port(t, "port1").Name()
-	// npi := npf.GetOrCreateInterface(ifName)
-	// npi.ApplyForwardingPolicy = np.PolicyId
-	// gnmi.Update(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Config(), ni1)
-
-	// json, err := ygot.EmitJSON(ni1, &ygot.EmitJSONConfig{
-	// 	Format: ygot.RFC7951,
-	// 	Indent: "  ",
-	// 	RFC7951Config: &ygot.RFC7951JSONConfig{
-	// 		AppendModuleName: true,
-	// 	},
-	// })
-	// if err != nil {
-	// 	t.Errorf("Error decoding sampling config: %v", err)
-	// }
-	// t.Logf("Got sampling config: %v", json)
-
 }
 
 func configureDUTStatic(t *testing.T, dut *ondatra.DUTDevice) {
@@ -280,7 +284,7 @@ func trafficPolicyConf(dut *ondatra.DUTDevice, interfaceName string) string {
 		// Apply Policy on the interface
 		trafficPolicyConfig := fmt.Sprintf(`
 			traffic-policies
-			traffic-policy BG_PBR_TRAFFIC_POLICY
+			traffic-policy %s
 			%s
 			%s
 			match ipv4-all-default ipv4
@@ -302,7 +306,7 @@ func trafficPolicyConf(dut *ondatra.DUTDevice, interfaceName string) string {
 			interface %s
 			
 			traffic-policy input BG_PBR_TRAFFIC_POLICY
-			`, v4MatchRules, v6MatchRules, ipvNHv4, ipvNHv6, interfaceName)
+			`, trafficPolicyName, v4MatchRules, v6MatchRules, ipvNHv4, ipvNHv6, interfaceName)
 		return trafficPolicyConfig
 	default:
 		return ""
@@ -335,19 +339,19 @@ func createBGPNeighbor(localAs, peerAs uint32, dut *ondatra.DUTDevice) *oc.Netwo
 
 	// Note: we have to define the peer group even if we aren't setting any policy because it's
 	// invalid OC for the neighbor to be part of a peer group that doesn't exist.
-	pgv4 := bgp.GetOrCreatePeerGroup(peerGrpNamev4P1)
+	pgv4 := bgp.GetOrCreatePeerGroup(peerGrpNamev4)
 	pgv4.PeerAs = ygot.Uint32(peerAs)
-	pgv4.PeerGroupName = ygot.String(peerGrpNamev4P1)
-	pgv6 := bgp.GetOrCreatePeerGroup(peerGrpNamev6P1)
+	pgv4.PeerGroupName = ygot.String(peerGrpNamev4)
+	pgv6 := bgp.GetOrCreatePeerGroup(peerGrpNamev6)
 	pgv6.PeerAs = ygot.Uint32(peerAs)
-	pgv6.PeerGroupName = ygot.String(peerGrpNamev6P1)
+	pgv6.PeerGroupName = ygot.String(peerGrpNamev6)
 
 	for _, nbr := range nbrs {
 		if nbr.isV4 {
 			nv4 := bgp.GetOrCreateNeighbor(nbr.neighborip)
 			nv4.PeerAs = ygot.Uint32(nbr.as)
 			nv4.Enabled = ygot.Bool(true)
-			nv4.PeerGroup = ygot.String(peerGrpNamev4P1)
+			nv4.PeerGroup = ygot.String(peerGrpNamev4)
 			afisafi := nv4.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST)
 			afisafi.Enabled = ygot.Bool(true)
 			nv4.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).Enabled = ygot.Bool(false)
@@ -360,7 +364,7 @@ func createBGPNeighbor(localAs, peerAs uint32, dut *ondatra.DUTDevice) *oc.Netwo
 			nv6 := bgp.GetOrCreateNeighbor(nbr.neighborip)
 			nv6.PeerAs = ygot.Uint32(nbr.as)
 			nv6.Enabled = ygot.Bool(true)
-			nv6.PeerGroup = ygot.String(peerGrpNamev6P1)
+			nv6.PeerGroup = ygot.String(peerGrpNamev6)
 			afisafi6 := nv6.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST)
 			afisafi6.Enabled = ygot.Bool(true)
 			nv6.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).Enabled = ygot.Bool(false)
@@ -548,6 +552,7 @@ func configureFlow(topo gosnappi.Config, name, src string, dst []string, dstMac,
 }
 
 func verifyFlowTraffic(t *testing.T, ate *ondatra.ATEDevice, config gosnappi.Config, flowName string) bool {
+	t.Log("Verify Flow Traffic")
 	startTime := time.Now()
 	count := 0
 	var got float64
@@ -619,9 +624,10 @@ func TestPolicyForwardingIndirectNextHop(t *testing.T) {
 
 	otg.StartProtocols(t)
 
+	t.Log("Verify BGP Session formed with Port 2")
 	waitForBGPSession(t, dut, true)
 
-	t.Logf("Verifying the Next-Hop for PF is advertised by BGP on Port2")
+	t.Log("Verifying the Next-Hop for PF is advertised by BGP on Port2")
 	verifyPrefixesTelemetryV4(t, dut, 1)
 
 	otg.StartTraffic(t)
@@ -629,37 +635,39 @@ func TestPolicyForwardingIndirectNextHop(t *testing.T) {
 	otg.StopTraffic(t)
 
 	t.Run("PF-1.1.1: Verify PF next-hop action", func(t *testing.T) {
+		t.Log("PF-1.1.1: Verify PF next-hop action Validation in progress")
 		if verifyFlowTraffic(t, ate, config, pfFlow) {
-			t.Logf("PF next-hop action Passed for V4")
+			t.Log("PF next-hop action Passed for V4")
 		} else {
-			t.Errorf("PF next-hop action Failed for V4")
+			t.Error("PF next-hop action Failed for V4")
 		}
 
 		if verifyFlowTraffic(t, ate, config, pfFlowv6) {
-			t.Logf("PF next-hop action Passed for V6")
+			t.Log("PF next-hop action Passed for V6")
 		} else {
-			t.Errorf("PF next-hop action Failed for V6")
+			t.Error("PF next-hop action Failed for V6")
 		}
 
 	})
 
 	t.Run("PF-1.1.2: Verify PF no-match action", func(t *testing.T) {
-
+		t.Log("PF-1.1.2: Verify PF no-match action Validation in progress")
 		if verifyFlowTraffic(t, ate, config, defaultFlow) {
-			t.Logf("PF no-match action Passed for V4")
+			t.Log("PF no-match action Passed for V4")
 		} else {
-			t.Errorf("PF no-match action Failed for V4")
+			t.Error("PF no-match action Failed for V4")
 		}
 
 		if verifyFlowTraffic(t, ate, config, defaultFlowV6) {
-			t.Logf("PF no-match action Passed for V6")
+			t.Log("PF no-match action Passed for V6")
 		} else {
-			t.Errorf("PF no-match action Failed for V6")
+			t.Error("PF no-match action Failed for V6")
 		}
 	})
 
 	t.Run("PF-1.1.3: Verify PF without NH present", func(t *testing.T) {
-
+		t.Log("PF-1.1.3: Verify PF without NH present Validation in progress")
+		t.Log("Withdraw next-hop prefixes from BGP Announcement")
 		cs := gosnappi.NewControlState()
 		cs.Protocol().Route().SetNames([]string{bgpV4RouteName, bgpV6RouteName}).SetState(gosnappi.StateProtocolRouteState.WITHDRAW)
 		otg.SetControlState(t, cs)
@@ -670,10 +678,11 @@ func TestPolicyForwardingIndirectNextHop(t *testing.T) {
 		time.Sleep(30 * time.Second)
 		otg.StopTraffic(t)
 
+		t.Log("Verify All traffic received on ATE Port 3.")
 		if verifyPortTraffic(t, ate, config, ate.Port(t, "port1").ID(), ate.Port(t, "port3").ID()) {
-			t.Logf("PF without NH Passed for V4 and V6")
+			t.Log("PF without NH Passed for V4 and V6")
 		} else {
-			t.Errorf("PF without NH Failed for V4 and V6")
+			t.Error("PF without NH Failed for V4 and V6")
 		}
 	})
 }
