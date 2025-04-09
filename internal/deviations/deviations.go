@@ -1323,6 +1323,11 @@ func GreGueTunnelInterfaceOcUnsupported(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetGreGueTunnelInterfaceOcUnsupported()
 }
 
+// StaticMplsLspUnsupported returns true if static mpls lsp parameters are unsupported
+func StaticMplsLspUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetStaticMplsLspUnsupported()
+}
+
 // LoadIntervalNotSupported returns true if load interval is not supported on vendors
 func LoadIntervalNotSupported(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetLoadIntervalNotSupported()
