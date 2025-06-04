@@ -1,0 +1,34 @@
+options {
+  username: "admin"
+  password: "admin"
+}
+
+ates {
+  id: "ate"
+  name: "hw controller"  
+
+  # This option specific to OTG over Ixia-HW. 
+  otg {
+    target: "127.0.0.1:40051"
+    insecure: true
+    timeout: 100
+  }
+
+  gnmi {
+    target: "127.0.0.1:50051"
+    skip_verify: true
+    timeout: 100
+  }
+
+  # Before this binding can be used with a topology, add ports mapping
+  # from its topology ID to the actual port name on the device.
+  ports {
+    id: "port1"
+    name: "10.39.49.57;2;15"  
+  }
+  ports {
+    id: "port2"
+    name: "10.39.49.57;2;16"  
+  }
+}
+

@@ -10,9 +10,12 @@ import (
 	"github.com/openconfig/featureprofiles/internal/otgutils"
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
-	otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
+	//otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
 	otg "github.com/openconfig/ondatra/otg"
-	"github.com/openconfig/ygnmi/ygnmi"
+	//	"github.com/openconfig/ygnmi/ygnmi"
+	//	"github.com/openconfig/ondatra/internal/rawapis"
+	"fmt"
+	"strings"
 )
 
 const (
@@ -31,21 +34,27 @@ type trafficEndpoints struct {
 
 var (
 	atePort1 = attrs.Attributes{
-		Name:    "atePort1",
-		MAC:     "02:00:01:01:01:01",
-		IPv4:    "192.0.2.1",
-		IPv4Len: 16,
+		Name:       "atePort1",
+		MAC:        "02:00:01:01:01:01",
+		IPv4:       "192.0.2.1",
+		IPv4Len:    16,
 		RouteCount: 1,
 	}
 
 	atePort2 = attrs.Attributes{
-		Name:    "atePort2",
-		MAC:     "02:00:02:01:01:01",
-		IPv4:    "192.0.3.1",
-		IPv4Len: 16,
+		Name:       "atePort2",
+		MAC:        "02:00:02:01:01:01",
+		IPv4:       "192.0.3.1",
+		IPv4Len:    16,
 		RouteCount: 1,
 	}
 )
+
+type ospfStats struct {
+	Name       string
+	NumSession uint64
+	FlapCount  uint64
+}
 
 func TestMain(m *testing.M) {
 	fptest.RunTests(m)
@@ -60,7 +69,6 @@ func configureOtgOspfv2(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	// add devices
 	d1 := config.Devices().Add().SetName("d1")
 	d2 := config.Devices().Add().SetName("d2")
-
 
 	// add protocol stacks for device d1
 	d1Eth1 := d1.Ethernets().
@@ -240,36 +248,23 @@ func sendTraffic(t *testing.T, otg *otg.OTG) {
 	otg.StopTraffic(t)
 }
 
-func verifyOtgOspfv2Telemetry(t *testing.T, otg *otg.OTG, c gosnappi.Config, state string) {
+func verifyOtgOspfv2TelemetryCheckAllSessionsUp(
+	t *testing.T, otg *otg.OTG,
+	c gosnappi.Config,
+	expectedMatric ospfStats) {
+	//timeout := 60
+	out := fmt.Sprintf("%s\n", strings.Repeat("-", 40))
+	out += fmt.Sprintf("%15s %15s\n", "RouterName", "upCount")
+	out += fmt.Sprintf("%s\n", strings.Repeat("-", 40))
 	for _, d := range c.Devices().Items() {
-		for _, ip := range d.Bgp().Ipv4Interfaces().Items() {
-			for _, configPeer := range ip.Peers().Items() {
-				nbrPath := gnmi.OTG().BgpPeer(configPeer.Name())
-				_, ok := gnmi.Watch(t, otg, nbrPath.SessionState().State(), time.Minute, func(val *ygnmi.Value[otgtelemetry.E_BgpPeer_SessionState]) bool {
-					currState, ok := val.Val()
-					return ok && currState.String() == state
-				}).Await(t)
-				if !ok {
-					fptest.LogQuery(t, "OSPFv2 reported state", nbrPath.State(), gnmi.Get(t, otg, nbrPath.State()))
-					t.Errorf("No OSPFv2 neighbor formed for peer %s", configPeer.Name())
-				}
-			}
+		ospfv2 := d.Ospfv2()
+		state := gnmi.Get(t, otg, gnmi.OTG().Ospfv2Router(ospfv2.Name()).Counters().SessionsUp().State())
+		out += fmt.Sprintf("%15s %15d\n", ospfv2.Name(), state)
+		if (state == 1) {
 		}
-		for _, ip := range d.Bgp().Ipv6Interfaces().Items() {
-			for _, configPeer := range ip.Peers().Items() {
-				nbrPath := gnmi.OTG().BgpPeer(configPeer.Name())
-				_, ok := gnmi.Watch(t, otg, nbrPath.SessionState().State(), time.Minute, func(val *ygnmi.Value[otgtelemetry.E_BgpPeer_SessionState]) bool {
-					currState, ok := val.Val()
-					return ok && currState.String() == state
-				}).Await(t)
-				if !ok {
-					fptest.LogQuery(t, "OSPFv2 reported state", nbrPath.State(), gnmi.Get(t, otg, nbrPath.State()))
-					t.Errorf("No OSPFv2 neighbor formed for peer %s", configPeer.Name())
-				}
-			}
-		}
-
 	}
+	out += fmt.Sprintf("%s\n", strings.Repeat("-", 40))
+	fmt.Println(out)
 }
 
 func TestOtgb2bOspfv2(t *testing.T) {
@@ -278,10 +273,19 @@ func TestOtgb2bOspfv2(t *testing.T) {
 
 	// Configure OSPFv2
 	otgConfig := configureOtgOspfv2(t, otg)
+	time.Sleep(20 * time.Second)
 
 	// Verify the OTG OSPFv2 state.
 	t.Logf("Verify OTG OSPFv2 sessions up")
-	verifyOtgOspfv2Telemetry(t, otg, otgConfig, "ESTABLISHED")
+	var expectedMetric ospfStats
+	expectedMetric.Name = "d1Ospfv2"
+	expectedMetric.NumSession = 1
+	expectedMetric.FlapCount = 0
+
+	verifyOtgOspfv2TelemetryCheckAllSessionsUp(t, otg, otgConfig, expectedMetric)
+
+	expectedMetric.Name = "d2Ospfv2"
+	verifyOtgOspfv2TelemetryCheckAllSessionsUp(t, otg, otgConfig, expectedMetric)
 
 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
 	sendTraffic(t, otg)
