@@ -1,0 +1,10 @@
+plan_id: "KDDI-DEMO-TEST-1.0"
+description: "Show OSPFv2 features"
+platform_exceptions: {
+  platform: {
+    vendor: IXIA
+  }
+  deviations: {
+  }
+}
+
