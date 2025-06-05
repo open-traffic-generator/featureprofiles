@@ -270,7 +270,6 @@ func sendTraffic(t *testing.T, otg *otg.OTG) {
 	otg.StopTraffic(t)
 }
 
-/*
 func verifyOtgOspfv3TelemetryCheckAllSessionsUp(
 	t *testing.T, otg *otg.OTG,
 	c gosnappi.Config,
@@ -282,18 +281,17 @@ func verifyOtgOspfv3TelemetryCheckAllSessionsUp(
 	for _, d := range c.Devices().Items() {
 		ospfv3Instance := d.Ospfv3()
 		for _, i := range ospfv3Instance.Instances().Items() {
-			ospfv3 := i.Name()
+			ospfv3 := i
 			fmt.Println(i)
 			state := gnmi.Get(t, otg, gnmi.OTG().Ospfv3Router(ospfv3.Name()).Counters().SessionsUp().State())
 			out += fmt.Sprintf("%15s %15d\n", ospfv3.Name(), state)
-			if (state == 1) {
+			if state == 1 {
 			}
 		}
 	}
 	out += fmt.Sprintf("%s\n", strings.Repeat("-", 40))
 	fmt.Println(out)
 }
-*/
 
 func verifyOtgOspfv3TelemetryCheckSessionsUpInRtr(
 	t *testing.T, otg *otg.OTG,
@@ -328,7 +326,7 @@ func TestOtgb2bOspfv3(t *testing.T) {
 	verifyOtgOspfv3TelemetryCheckSessionsUpInRtr(t, otg, expectedMetric.Name, expectedMetric)
 
 	expectedMetric.Name = "d2Ospfv3"
-	verifyOtgOspfv3TelemetryCheckSessionsUpInRtr(t, otg, expectedMetric.Name, expectedMetric)
+	verifyOtgOspfv3TelemetryCheckAllSessionsUp(t, otg, otgConfig, expectedMetric)
 
 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
 	sendTraffic(t, otg)
