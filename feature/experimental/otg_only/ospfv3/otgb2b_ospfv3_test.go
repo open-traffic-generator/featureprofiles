@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/open-traffic-generator/snappi/gosnappi"
-	//"github.com/openconfig/featureprofiles/internal/attrs"
 	"fmt"
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/otgutils"
@@ -19,37 +18,8 @@ const (
 	trafficDuration   = 5 * time.Second
 	tolerance         = 50
 	tolerancePct      = 2
-	routesCount       = 40
-	txStartRange      = "100.1.1.1"
-	rxStartRange      = "200.1.1.1"
-	totalPeersPerPort = 20
+	protocolUpTime    = 20 * time.Second
 )
-
-/*
-type trafficEndpoints struct {
-	name, values []string
-}
-
-var (
-
-	atePort1 = attrs.Attributes{
-		Name:       "atePort1",
-		MAC:        "02:00:01:01:01:01",
-		IPv4:       "192.0.2.1",
-		IPv4Len:    16,
-		RouteCount: 1,
-	}
-
-	atePort2 = attrs.Attributes{
-		Name:       "atePort2",
-		MAC:        "02:00:02:01:01:01",
-		IPv4:       "192.0.3.1",
-		IPv4Len:    16,
-		RouteCount: 1,
-	}
-
-)
-*/
 
 type ospfStats struct {
 	Name       string
@@ -166,12 +136,6 @@ func Ospfv3BroadcastAandP2PDutPort(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		SetCount(routecount).
 		SetStep(1)
 
-	// Set non-default route-origin
-	//d2ospfv3v6route.
-	//      RouteOrigin().NssaExternal().Capabilities().
-	//      SetPropagation(true).
-	//      ForwardingAddress()
-
 	// Flow port1->port2
 	flow1 := config.Flows().Add()
 	flow1.SetName("IPv6 " + p1.Name() + "-> " + p2.Name()).
@@ -274,7 +238,6 @@ func verifyOtgOspfv3TelemetryCheckAllSessionsUp(
 	t *testing.T, otg *otg.OTG,
 	c gosnappi.Config,
 	expectedMatric ospfStats) {
-	//timeout := 60
 	out := fmt.Sprintf("%s\n", strings.Repeat("-", 40))
 	out += fmt.Sprintf("%15s %15s\n", "RouterName", "upCount")
 	out += fmt.Sprintf("%s\n", strings.Repeat("-", 40))
@@ -282,7 +245,6 @@ func verifyOtgOspfv3TelemetryCheckAllSessionsUp(
 		ospfv3Instance := d.Ospfv3()
 		for _, i := range ospfv3Instance.Instances().Items() {
 			ospfv3 := i
-			fmt.Println(i)
 			state := gnmi.Get(t, otg, gnmi.OTG().Ospfv3Router(ospfv3.Name()).Counters().SessionsUp().State())
 			out += fmt.Sprintf("%15s %15d\n", ospfv3.Name(), state)
 			if state == 1 {
@@ -311,22 +273,36 @@ func verifyOtgOspfv3TelemetryCheckSessionsUpInRtr(
 func TestOtgb2bOspfv3(t *testing.T) {
 	ate := ondatra.ATE(t, "ate")
 	otg := ate.OTG()
+	var expectedMetric ospfStats
 
 	// Configure OSPFv2
 	otgConfig := Ospfv3BroadcastAandP2PDutPort(t, otg)
-	time.Sleep(20 * time.Second)
-
-	// Verify the OTG OSPFv2 state.
-	t.Logf("Verify OTG OSPFv2 sessions up")
-	var expectedMetric ospfStats
-	expectedMetric.NumSession = 1
-	expectedMetric.FlapCount = 0
+	fmt.Println(otgConfig.Marshal().ToJson())
 
 	expectedMetric.Name = "d1Ospfv3"
-	verifyOtgOspfv3TelemetryCheckSessionsUpInRtr(t, otg, expectedMetric.Name, expectedMetric)
+        verifyOtgOspfv3TelemetryCheckSessionsUpInRtr(
+                t,
+                otg,
+                expectedMetric.Name,
+                expectedMetric)
 
-	expectedMetric.Name = "d2Ospfv3"
-	verifyOtgOspfv3TelemetryCheckAllSessionsUp(t, otg, otgConfig, expectedMetric)
+        expectedMetric.Name = "d2Ospfv3"
+	verifyOtgOspfv3TelemetryCheckSessionsUpInRtr(
+                t,
+                otg,
+                expectedMetric.Name,
+                expectedMetric)
+
+	msg := fmt.Sprintf("Wait for %d ns for protocol to be up\n", protocolUpTime)
+	t.Log(msg)
+	time.Sleep(protocolUpTime)
+
+	t.Logf("Verify OTG OSPFv2 sessions up")
+	verifyOtgOspfv3TelemetryCheckAllSessionsUp(
+		t,
+		otg,
+		otgConfig,
+		expectedMetric)
 
 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
 	sendTraffic(t, otg)
