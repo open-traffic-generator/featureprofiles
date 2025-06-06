@@ -1,4 +1,4 @@
-package otg_ospfv2_b2b
+package otg_ospfv3_dut
 
 import (
 	"testing"
@@ -163,7 +163,7 @@ func Ospfv3BroadcastAandP2PDutPort(t *testing.T, otg *otg.OTG) gosnappi.Config {
 
 	// Flow port2->port1
 	flow2 := config.Flows().Add()
-	flow2.SetName("IPv4 " + p2.Name() + "-> " + p1.Name()).
+	flow2.SetName("IPv6 " + p2.Name() + "-> " + p1.Name()).
 		TxRx().
 		Device().
 		SetTxNames([]string{d2ospfv3v6route.Name()}).
@@ -275,7 +275,7 @@ func TestOtgb2bOspfv3(t *testing.T) {
 	otg := ate.OTG()
 	var expectedMetric ospfStats
 
-	// Configure OSPFv2
+	// Configure OSPFv3
 	otgConfig := Ospfv3BroadcastAandP2PDutPort(t, otg)
 	fmt.Println(otgConfig.Marshal().ToJson())
 
