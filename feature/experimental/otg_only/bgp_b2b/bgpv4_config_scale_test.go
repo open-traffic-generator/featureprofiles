@@ -29,24 +29,21 @@ const (
 	peer1RouteRangeCount = uint64(3)
 	peer1RoutePrefixInRR = 32
 
-	mac2                 = "00:00:03:03:03:02"
-	mtu2                 = mtu1
-	ipv4Addr2            = ipv4Gateway1
-	ipv4Gateway2         = ipv4Addr1
-	ipv4PrifixLen2       = ipv4PrifixLen1
-	routerId2            = ipv4Addr2
-	bgpv4As2             = 2223
-	peerOfBgp2           = ipv4Gateway2
-	peer2StartingRoute   = "33.33.33.3"
-	peer2RouteCount      = 1
-	peer2RouteStep       = 1
-	peer2RoutePrefix     = 32
+	mac2               = "00:00:03:03:03:02"
+	mtu2               = mtu1
+	ipv4Addr2          = ipv4Gateway1
+	ipv4Gateway2       = ipv4Addr1
+	ipv4PrifixLen2     = ipv4PrifixLen1
+	routerId2          = ipv4Addr2
+	bgpv4As2           = 2223
+	peerOfBgp2         = ipv4Gateway2
+	peer2StartingRoute = "33.33.33.3"
+	peer2RouteCount    = 1
+	peer2RouteStep     = 1
+	peer2RoutePrefix   = 32
 
-	minuitesToSessionUp  = 1
-
+	minuitesToSessionUp = 1
 )
-
-
 
 func TestMain(m *testing.M) {
 	fptest.RunTests(m)
@@ -264,7 +261,7 @@ func verifyMyOTGBGPTelemetry(t *testing.T, otg *otg.OTG, c gosnappi.Config, stat
 					t,
 					otg,
 					nbrPath.SessionState().State(),
-					time.Minute * minuitesToSessionUp,
+					time.Minute*minuitesToSessionUp,
 					func(val *ygnmi.Value[otgtelemetry.E_BgpPeer_SessionState]) bool {
 						currState, ok := val.Val()
 						return ok && currState.String() == state
