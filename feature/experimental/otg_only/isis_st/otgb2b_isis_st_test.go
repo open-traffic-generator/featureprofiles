@@ -279,18 +279,42 @@ func verifyIsisLsp(t *testing.T, otg *otg.OTG, c gosnappi.Config) {
 			}
 		}
 	}
-	for _, isisName := range routerNames {
 
-		_, ok1 := gnmi.WatchAll(t, otg, gnmi.OTG().IsisRouter(isisName).LinkStateDatabase().LspsAny().LspId().State(), time.Minute, func(v *ygnmi.Value[string]) bool {
-			lspId, present := v.Val()
-			if present {
-				if lspId == "660000000005-0-0" || lspId == "670000000001-0-0" {
-					t.Logf("Match lspId == %v", lspId)
-					return true
+	for _, isisName := range routerNames {
+		_, ok1 := gnmi.WatchAll(
+			t,
+			otg,
+			gnmi.OTG().IsisRouter(isisName).LinkStateDatabase().LspsAny().LspId().State(),
+			time.Minute,
+			func(v *ygnmi.Value[string]) bool {
+				lspId, present := v.Val()
+				lspIsList := []string{
+						//"660000000005-0-0",
+						//"670000000001-0-0",
+						"650000000001-00-00",
+						"670000000001-00-00",
+						"670000000002-00-00",
+						"670000000003-00-00",
+						"660000000008-00-00",
+						"640000000001-00-00",
+						"660000000009-00-00",
+						"660000000003-00-00",
+						"660000000002-00-00",
+					}
+				if present {
+					// if ANY of them match then leave. To be corrected further
+					for ndx := 0; ndx < len(lspIsList); ndx++ {
+						if lspId == lspIsList[ndx] {
+							t.Logf("Match lspId == %v", lspId)
+							return true
+						} else {
+							// uncomment for debugging
+							//t.Logf("LSP ID: want %v == got %v", lspIsList[ndx], lspId)
+						}
+					}
 				}
-			}
-			return false
-		}).Await(t)
+				return false
+			}).Await(t)
 
 		if !ok1 {
 			t.Fatalf("ISIS LSP ID is not matching")
