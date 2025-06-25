@@ -4,6 +4,7 @@ import (
 	"log"
 	"testing"
 	"time"
+	"os"
 
 	"github.com/open-traffic-generator/snappi/gosnappi"
 	"github.com/openconfig/featureprofiles/internal/attrs"
@@ -176,6 +177,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		SetTxNames([]string{fromRoute.Name()}).
 		SetRxNames([]string{toRoute.Name()})
 	flow.Metrics().SetEnable(true)
+	flow.Size().SetFixed(100)
 	flow.Duration().FixedPackets().SetPackets(1000)
 	flow.Rate().SetPps(200)
 	//ethernet
@@ -186,6 +188,14 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	flowIp := flow.Packet().Add().Ipv4()
 	flowIp.Src().SetValue(fromRoute.Addresses().Items()[0].Address())
 	flowIp.Dst().SetValue(toRoute.Addresses().Items()[0].Address())
+
+	t.Logf("**Generated config written to st_config.json.")
+	configInJson, err := config.Marshal().ToJson()
+	filename := "st_config.json"
+	err = os.WriteFile(filename, []byte(configInJson), 0644)	
+	if err != nil {
+        	t.Fatal(err)
+	}
 
 	t.Logf("Pushing config to ATE and starting protocols...")
 	otg.PushConfig(t, config)

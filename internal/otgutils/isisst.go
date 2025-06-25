@@ -272,29 +272,27 @@ func madeLink(d1 gosnappi.Device, d2 gosnappi.Device, _idx1 int, _idx2 int, link
 
 	eth1Name := fmt.Sprintf("%veth%d", d1name, len(d1.Ethernets().Items())+1)
 	eth2Name := fmt.Sprintf("%veth%d", d2name, len(d2.Ethernets().Items())+1)
-	macAdd1 := fmt.Sprintf("00:00:dd:ee:0%d:0%d", idx1, idx2)
-	macAdd2 := fmt.Sprintf("00:00:dd:ee:0%d:0%d", idx2, idx1)
 	isisInf1Name := fmt.Sprintf("%vIsisinf%d", d1name, len(d1.Isis().Interfaces().Items())+1)
 	isisInf2Name := fmt.Sprintf("%vIsisinf%d", d2name, len(d2.Isis().Interfaces().Items())+1)
 
 	d1eth := d1.Ethernets().Add().
-		SetName(eth1Name).
-		SetMac(macAdd1)
+		SetName(eth1Name)
 	d1eth.Connection().SimulatedLink().SetRemoteSimulatedLink(eth2Name)
 
 	isis1Inf := d1.Isis().Interfaces().Add().
 		SetName(isisInf1Name).
-		SetEthName(eth1Name)
+		SetEthName(eth1Name).
+		SetNetworkType(gosnappi.IsisInterfaceNetworkType.POINT_TO_POINT)
 	isis1Inf.TrafficEngineering().Add().PriorityBandwidths()
 
 	d2eth := d2.Ethernets().Add().
-		SetName(eth2Name).
-		SetMac(macAdd2)
+		SetName(eth2Name)
 	d2eth.Connection().SimulatedLink().SetRemoteSimulatedLink(eth1Name)
 
 	isis2Inf := d2.Isis().Interfaces().Add().
 		SetName(isisInf2Name).
-		SetEthName(eth2Name)
+		SetEthName(eth2Name).
+		SetNetworkType(gosnappi.IsisInterfaceNetworkType.POINT_TO_POINT)
 	isis2Inf.TrafficEngineering().Add().PriorityBandwidths()
 
 	if len(linkIp4FirstOctet) == 0 && len(linkIp6FirstOctet) == 0 {
