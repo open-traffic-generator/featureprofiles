@@ -208,7 +208,7 @@ func verifyAFT(ctx context.Context, t *testing.T, args *testArgs) {
 // verifyTraffic verifies that traffic flows through the DUT without any loss.
 func verifyTraffic(ctx context.Context, t *testing.T, args *testArgs) {
 	t.Logf("Verify by running traffic that %s is active", ateDstNetCIDR)
-
+	time.Sleep(10 * time.Second)
 	args.ate.OTG().StartTraffic(t)
 	t.Logf("Wait for 15 seconds")
 	time.Sleep(15 * time.Second)
@@ -301,7 +301,7 @@ func TestDUTDaemonFailure(t *testing.T) {
 	})
 
 	t.Run("RestartTraffic", func(t *testing.T) {
-
+		time.Sleep(10 * time.Second)
 		args.ate.OTG().StartTraffic(t)
 
 		t.Logf("Wait for 15 seconds")
@@ -314,6 +314,7 @@ func TestDUTDaemonFailure(t *testing.T) {
 
 		t.Logf("Time check: %s", time.Since(start))
 
+		time.Sleep(10 * time.Second)
 		t.Run("VerifyAFT", func(t *testing.T) {
 			verifyAFT(ctx, t, args)
 		})

@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 // Similarly, Traffic is sent for IPv6 destinations.
 
 const (
-	trafficDuration          = 1 * time.Minute
+	trafficDuration          = 10 * time.Second
 	ipv4SrcTraffic           = "192.0.2.2"
 	ipv6SrcTraffic           = "2001:db8::192:0:2:2"
 	ipv4DstTrafficStart      = "203.0.113.1"

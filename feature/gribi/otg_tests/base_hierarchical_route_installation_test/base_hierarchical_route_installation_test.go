@@ -59,7 +59,7 @@ const (
 	nhgIndex2               = 52
 	nonDefaultVRF           = "VRF-1"
 	nhMAC                   = "00:1A:11:00:0A:BC"
-	macFilter               = "0xABC" // Hex equalent last 12 bits
+	macFilter               = "0x2bc" //tracking on only 10 bits so
 	policyName              = "redirect-to-VRF1"
 	niDecapTeVrf            = "DECAP_TE_VRF"
 	niEncapTeVrfA           = "ENCAP_TE_VRF_A"

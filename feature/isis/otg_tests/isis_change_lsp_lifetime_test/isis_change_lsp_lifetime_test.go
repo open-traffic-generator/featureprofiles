@@ -242,7 +242,8 @@ func TestISISChangeLSPLifetime(t *testing.T) {
 			otg.StopTraffic(t)
 
 			otgutils.LogFlowMetrics(t, otg, ts.ATETop)
-			otgutils.LogPortMetrics(t, otg, ts.ATETop)
+			// otgutils.LogPortMetrics(t, otg, ts.ATETop)
+			// otgutils.LogPortMetrics(t, otg,ts.ATETop)
 
 			for _, flow := range []string{v4FlowName, v6FlowName} {
 				t.Log("Checking flow telemetry...")

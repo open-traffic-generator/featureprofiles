@@ -117,6 +117,7 @@ func TestIpv4EntryOnAggregatePort(t *testing.T) {
 
 	t.Run("Aggregate Ports re-enabled", func(t *testing.T) {
 		aggregatePortState(t, dut, ate, []string{"port2", "port3"}, true)
+		time.Sleep(2 * time.Second)
 		validateTrafficFlows(t, ate, []string{f1}, []string{})
 	})
 }

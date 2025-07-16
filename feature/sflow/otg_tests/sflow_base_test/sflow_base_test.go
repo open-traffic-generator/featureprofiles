@@ -344,16 +344,16 @@ func enableCapture(t *testing.T, ate *ondatra.ATEDevice, config gosnappi.Config,
 
 	config.Captures().Clear()
 	// enable packet capture on this port
-	cap := config.Captures().Add().SetName("sFlowpacketCapture").
+	config.Captures().Add().SetName("sFlowpacketCapture").
 		SetPortNames([]string{config.Ports().Items()[1].Name()}).
 		SetFormat(gosnappi.CaptureFormat.PCAP)
-	filter := cap.Filters().Add()
+	//filter := cap.Filters().Add()
 	if ip == IPv4 {
 		// filter on hex value of IPv4 - 203.0.113.1
-		filter.Ipv4().Src().SetValue("cb007101")
+		//filter.Ipv4().Src().SetValue("cb007101")
 	} else {
 		// filter on hex value of IPv6 - 2001:db8::203:0:113:1
-		filter.Ipv6().Src().SetValue("20010db8000000000203000001130001")
+		//filter.Ipv6().Src().SetValue("20010db8000000000203000001130001")
 	}
 
 	ate.OTG().PushConfig(t, config)

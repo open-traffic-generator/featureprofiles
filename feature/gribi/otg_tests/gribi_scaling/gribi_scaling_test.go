@@ -380,6 +380,7 @@ func createFlow(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.Config, vrfTC
 }
 
 func checkTraffic(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.Config) {
+	time.Sleep(time.Second * 10)
 	ate.OTG().StartTraffic(t)
 	time.Sleep(time.Second * 30)
 	ate.OTG().StopTraffic(t)

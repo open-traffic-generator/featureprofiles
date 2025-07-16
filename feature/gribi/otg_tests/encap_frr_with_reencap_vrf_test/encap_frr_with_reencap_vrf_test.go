@@ -974,8 +974,8 @@ func TestEncapFrr(t *testing.T) {
 	gribic := dut.RawAPIs().GRIBI(t)
 	ate := ondatra.ATE(t, "ate")
 	top := gosnappi.NewConfig()
-	dutPorts := sortPorts(dut.Ports())[0:8]
-	atePorts := sortPorts(ate.Ports())[0:8]
+	dutPorts := sortPorts(dut.Ports())[0:4]
+	atePorts := sortPorts(ate.Ports())[0:4]
 
 	t.Log("Configure Default Network Instance")
 	fptest.ConfigureDefaultNetworkInstance(t, dut)

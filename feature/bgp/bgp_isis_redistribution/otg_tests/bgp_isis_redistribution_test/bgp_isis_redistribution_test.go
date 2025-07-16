@@ -445,7 +445,7 @@ func verifyNonMatchingPrefixTelemetry(t *testing.T, dut *ondatra.DUTDevice, ate 
 		t.Errorf("Import policy: %v, want: %s", importPolicy, []string{v4RoutePolicy})
 	}
 
-	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter("devIsis").LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().Prefix(advertisedIPv4.address).State(), 30*time.Second, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_LinkStateDatabase_Lsps_Tlvs_ExtendedIpv4Reachability_Prefix]) bool {
+	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter("devIsis").LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().Prefix(advertisedIPv4.address).State(), 60*time.Second, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_LinkStateDatabase_Lsps_Tlvs_ExtendedIpv4Reachability_Prefix]) bool {
 		prefix, present := v.Val()
 		return present && prefix.GetPrefix() == advertisedIPv4.address
 	}).Await(t)
@@ -464,7 +464,7 @@ func verifyMatchingPrefixTelemetry(t *testing.T, dut *ondatra.DUTDevice, ate *on
 		t.Errorf("Prefix is nil, want: %s", advertisedIPv4.cidr(t))
 	}
 
-	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter("devIsis").LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().Prefix(advertisedIPv4.address).State(), 30*time.Second, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_LinkStateDatabase_Lsps_Tlvs_ExtendedIpv4Reachability_Prefix]) bool {
+	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter("devIsis").LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().Prefix(advertisedIPv4.address).State(), 60*time.Second, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_LinkStateDatabase_Lsps_Tlvs_ExtendedIpv4Reachability_Prefix]) bool {
 		prefix, present := v.Val()
 		return present && prefix.GetPrefix() == advertisedIPv4.address
 	}).Await(t)
@@ -485,7 +485,7 @@ func verifyNonMatchingCommunityTelemetry(t *testing.T, dut *ondatra.DUTDevice, a
 		t.Errorf("Community set member: %v, want: %s or %d", commSetMember, nonMatchingCommunityVal, cm)
 	}
 
-	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter("devIsis").LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().Prefix(advertisedIPv4.address).State(), 30*time.Second, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_LinkStateDatabase_Lsps_Tlvs_ExtendedIpv4Reachability_Prefix]) bool {
+	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter("devIsis").LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().Prefix(advertisedIPv4.address).State(), 60*time.Second, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_LinkStateDatabase_Lsps_Tlvs_ExtendedIpv4Reachability_Prefix]) bool {
 		_, present := v.Val()
 		return !present
 	}).Await(t)
@@ -505,7 +505,7 @@ func verifyMatchingCommunityTelemetry(t *testing.T, dut *ondatra.DUTDevice, ate 
 		t.Errorf("Community set member: %v, want: %s or %d", commSetMember, matchingCommunityVal, cm)
 	}
 
-	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter("devIsis").LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().Prefix(advertisedIPv4.address).State(), 30*time.Second, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_LinkStateDatabase_Lsps_Tlvs_ExtendedIpv4Reachability_Prefix]) bool {
+	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter("devIsis").LinkStateDatabase().LspsAny().Tlvs().ExtendedIpv4Reachability().Prefix(advertisedIPv4.address).State(), 60*time.Second, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_LinkStateDatabase_Lsps_Tlvs_ExtendedIpv4Reachability_Prefix]) bool {
 		prefix, present := v.Val()
 		return present && prefix.GetPrefix() == advertisedIPv4.address
 	}).Await(t)

@@ -179,9 +179,11 @@ func TestDefaultAddressFamilies(t *testing.T) {
 			fptest.LogQuery(t, "test configuration", gnmi.OC().Config(), d)
 			gnmi.Update(t, dut, gnmi.OC().Config(), d)
 
+			time.Sleep(15 * time.Second)
 			ate.OTG().StartProtocols(t)
 			otgutils.WaitForARP(t, ate.OTG(), top, "IPv4")
 			otgutils.WaitForARP(t, ate.OTG(), top, "IPv6")
+			// time.Sleep(10 * time.Second)
 
 			// https://github.com/openconfig/featureprofiles/issues/3410
 			// Below code will be removed once ixia issue is fixed.

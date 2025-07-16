@@ -254,6 +254,7 @@ func TestDirectBackupNexthopGroup(t *testing.T) {
 			})
 
 			t.Run("Validate Baseline Traffic Delivery", func(t *testing.T) {
+				time.Sleep(6 * time.Second)
 				tcArgs.validateTrafficFlows(t, ate, ateTop, baselineFlow, backupFlow)
 			})
 
