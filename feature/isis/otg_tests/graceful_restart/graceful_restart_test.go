@@ -148,7 +148,7 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 
 	isisgr := glob.GetOrCreateGracefulRestart()
 	isisgr.SetEnabled(true)
-	isisgr.SetHelperOnly(true)
+	isisgr.SetHelperOnly(false)
 	isisgr.SetRestartTime(gracefulRestartTime)
 
 	// Configure ISIS on DUT Port 1
@@ -388,16 +388,16 @@ func TestGracefulRestart(t *testing.T) {
 			Description: "GR Helper",
 			testFunc:    testGrHelper,
 		},
-		// {
-		// 	Name:        "Testcase: RT-2.16.2 ISIS with Controller Card Switchover",
-		// 	Description: "Validate traffic with controller card switchover",
-		// 	testFunc:    testISISWithControllerCardSwitchOver,
-		// },
-		// {
-		// 	Name:        "Testcase: RT-2.16.3 Verify traffic with DUT ISIS Restart",
-		// 	Description: "Validate traffic with DUT ISIS restart",
-		// 	testFunc:    testISISWithDUTRestart,
-		// },
+		{
+			Name:        "Testcase: RT-2.16.2 ISIS with Controller Card Switchover",
+			Description: "Validate traffic with controller card switchover",
+			testFunc:    testISISWithControllerCardSwitchOver,
+		},
+		{
+			Name:        "Testcase: RT-2.16.3 Verify traffic with DUT ISIS Restart",
+			Description: "Validate traffic with DUT ISIS restart",
+			testFunc:    testISISWithDUTRestart,
+		},
 	}
 
 	// Run the test cases.
@@ -494,8 +494,8 @@ func testGrHelper(t *testing.T, dut *ondatra.DUTDevice, otg *otg.OTG, otgConfig 
 	// 	// /isis-routers/isis-router/state/adjacencies/state/adjacencies/state/neighbor-state/state/tlvs/restart_tlv/state/flag
 	// 	func(v *ygnmi.Value[otgtelemetry.E_RestartTlv_Flags]) bool {
 	// 		val, present := v.Val()
-	// 		t.Logf("Neighbor Level type val %v", val)
-	// 		return present && val.String() == "LEVEL_2"
+	// 		t.Logf("Neighbor Restart Tlv val %v", val)
+	// 		return present
 	// 	}).Await(t)
 	// if !ok {
 	// 	t.Errorf("ISIS Router Adjacencies values of LevelType  is not correct")
@@ -605,19 +605,20 @@ func testISISWithControllerCardSwitchOver(t *testing.T, dut *ondatra.DUTDevice, 
 
 }
 
+// ISIS DUT As Restarting, GR triggered from DUT
 func testISISWithDUTRestart(t *testing.T, dut *ondatra.DUTDevice, otg *otg.OTG, otgConfig gosnappi.Config) {
 	otgConfig.Devices().Items()[1].Isis().GracefulRestart().SetHelperMode(true)
 	otg.PushConfig(t, otgConfig)
 	otg.StartProtocols(t)
 	time.Sleep(20 * time.Second)
-
 	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()})
+
 	otg.StartTraffic(t)
 	time.Sleep(10 * time.Second)
 	otg.StopTraffic(t)
 	verifyTraffic(t, otg, otgConfig, false)
 
-	t.Logf("Initiating Kill Process on DUT")
+	t.Logf("Initiating Kill Process on DUT to trigger GR and Verify Traffic with No LOSS as Graceful enabled !")
 	gnoi.KillProcess(t, dut, gnoi.OCAGENT, gnoi.SigTerm, true, true)
 	startTime := time.Now()
 	for {
@@ -632,4 +633,58 @@ func testISISWithDUTRestart(t *testing.T, dut *ondatra.DUTDevice, otg *otg.OTG, 
 			t.Fatalf("Traffic verification failed. Traffic didn't pass within the graceful restart time : %v sec", gracefulRestartTime)
 		}
 	}
+
+	// // After Initiating graceful restart, Verify GR metrics
+	// t.Log("Verify ISIS GR metrics such as GR Initiate, GR Succeeded")
+	// _, ok := gnmi.Watch(t, otg, gnmi.OTG().IsisRouter(isisPort2Device).Counters().NeighborGrInitiated().State(), 10*time.Second, func(v *ygnmi.Value[uint64]) bool {
+	// 	time.Sleep(1 * time.Second)
+	// 	val, present := v.Val()
+	// 	t.Logf(" Neighbor GR Initiate: %d", val)
+	// 	return present && val >= 1
+	// }).Await(t)
+	// if !ok {
+	// 	t.Errorf("ISIS Router GR Initiate Metrics is not as expected")
+	// }
+
+	// After Initiating graceful restart, Verify ISIS adjacencies values for Local and Neighbor restarting status
+	t.Log("Verify ISIS adjacencies values for Local and Neighbor restarting status")
+	_, ok := gnmi.WatchAll(t, otg, gnmi.OTG().IsisRouter(isisPort2Device).Adjacencies().AdjacenciesAny().NeighborState().NeighRestartingStatus().CurrentState().State(), 10*time.Second,
+		func(v *ygnmi.Value[otgtelemetry.E_NeighRestartingStatus_CurrentState]) bool {
+			val, present := v.Val()
+			t.Logf("Neighbor Current State: %v", val)
+			return present && val.String() == "RUNNING"
+		}).Await(t)
+	if !ok {
+		t.Errorf("ISIS Router Adjacencies values of Neighbor restarting Status  is not correct ")
+	}
+
+	_, ok = gnmi.WatchAll(t, otg, gnmi.OTG().IsisRouter(isisPort2Device).Adjacencies().AdjacenciesAny().LocalState().LocalRestartingStatus().CurrentState().State(), 10*time.Second,
+		func(v *ygnmi.Value[otgtelemetry.E_LocalRestartingStatus_CurrentState]) bool {
+			val, present := v.Val()
+			t.Logf("Local Current State: %v", val)
+			return present && val.String() == "RUNNING"
+		}).Await(t)
+	if !ok {
+		t.Errorf("ISIS Router Adjacencies values of Local restarting Status  is not correct ")
+	}
+
+	_, ok = gnmi.WatchAll(t, otg, gnmi.OTG().IsisRouter(isisPort2Device).Adjacencies().AdjacenciesAny().NeighborState().LevelType().State(), 10*time.Second,
+		func(v *ygnmi.Value[otgtelemetry.E_NeighborState_LevelType]) bool {
+			val, present := v.Val()
+			t.Logf("Neighbor Level type val %v", val)
+			return present && val.String() == "LEVEL_2"
+		}).Await(t)
+	if !ok {
+		t.Errorf("ISIS Router Adjacencies values of LevelType  is not correct")
+	}
+
+	// _, ok = gnmi.Watch(t, otg, gnmi.OTG().IsisRouter(isisPort2Device).Counters().NeighborGrSucceeded().State(), 10*time.Second, func(v *ygnmi.Value[uint64]) bool {
+	// 	time.Sleep(1 * time.Second)
+	// 	val, present := v.Val()
+	// 	t.Logf(" Neighbor GR Succeeded: %d", val)
+	// 	return present && val >= 1
+	// }).Await(t)
+	// if !ok {
+	// 	t.Errorf("ISIS Router GR Succeeded Metrics is not as expected")
+	// }
 }
