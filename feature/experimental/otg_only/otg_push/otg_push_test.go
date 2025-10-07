@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	configFile      = "bgp.json"
+	configFile      = "bgp.yaml"
 	trafficDuration = 10 * time.Second
 	tolerance       = 50
 	tolerancePct    = 2
@@ -44,6 +44,7 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		}
 
 	}
+	t.Log(config.Marshal().ToJson())
 	t.Logf("Pushing config to ATE and starting protocols...")
 	otg.PushConfig(t, config)
 	// time.Sleep(40 * time.Second)

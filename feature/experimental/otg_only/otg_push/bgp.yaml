@@ -1,78 +1,236 @@
-devices:
-- bgp:
-    ipv4_interfaces:
-    - ipv4_name: ixia04-sql80.corp.google.com.IPv4
-      peers:
-      - as_number: 65535
-        as_number_width: four
-        as_type: ebgp
-        name: ixia04-sql80.corp.google.com.BGP4.replay_peer.community 3
-        peer_address: 192.0.2.2
-        v4_routes:
-        - addresses:
-          - address: 10.23.15.0
-            count: 1
-            prefix: 26
-            step: 1
-          advanced:
-            include_local_preference: true
-            include_multi_exit_discriminator: true
-            include_origin: true
-            local_preference: 100
-            origin: igp
-          communities:
-          - as_custom: 12333
-            as_number: 65531
-          - as_custom: 20421
-            as_number: 65534
-          - as_custom: 20450
-            as_number: 65534
-          name: v4 route0
-          next_hop_address_type: ipv4
-          next_hop_ipv4_address: 10.246.222.9
-          next_hop_ipv6_address: ::0
-          next_hop_mode: manual
-    - ipv4_name: ixia04-sql80.corp.google.com.IPv4
-      peers:
-      - as_number: 65535
-        as_number_width: four
-        as_type: ebgp
-        name: ixia04-sql80.corp.google.com.BGP4.replay_peer.community 1
-        peer_address: 192.0.2.2
-        v4_routes:
-        - addresses:
-          - address: 10.245.172.120
-            count: 1
-            prefix: 30
-            step: 1
-          advanced:
-            include_local_preference: true
-            include_multi_exit_discriminator: true
-            include_origin: true
-            local_preference: 100
-            origin: igp
-          communities:
-          - as_custom: 20410
-            as_number: 65534
-          name: v4 route1
-          next_hop_address_type: ipv4
-          next_hop_ipv4_address: 10.245.172.127
-          next_hop_ipv6_address: ::0
-          next_hop_mode: manual
-    router_id: 192.0.2.2
-  ethernets:
-  - connection:
-      choice: port_name
-      port_name: port1
-    ipv4_addresses:
-    - address: 192.0.2.2
-      gateway: 192.0.2.2
-      name: ixia04-sql80.corp.google.com.IPv4
-      prefix: 30
-    mac: "02:00:01:01:01:01"
-    mtu: 1500
-    name: ixia04-sql80.corp.google.com.Eth
-  name: ixia04-sql80.corp.google.com
-ports:
-- location: 66.102.11.142;1;8
-  name: port1
+        - bgp:
+            ipv4_interfaces:
+            - ipv4_name: atePort1.IPv4-1
+              peers:
+              - as_number: 65000
+                as_number_width: four
+                as_type: ebgp
+                learned_information_filter:
+                  unicast_ipv4_prefix: true
+                  unicast_ipv6_prefix: true
+                name: txBgpv4Peer-1
+                peer_address: 192.0.3.1
+                v4_routes:
+                - addresses:
+                  - address: 100.1.1.1
+                    count: 2
+                    prefix: 32
+                    step: 1
+                  advanced:
+                    include_local_preference: true
+                    include_multi_exit_discriminator: true
+                    include_origin: true
+                    local_preference: 100
+                    origin: igp
+                  communities:
+                  - as_custom: 12333
+                    as_number: 65531
+                  - as_custom: 20421
+                    as_number: 65534
+                  - as_custom: 20450
+                    as_number: 65534
+                  name: txBgpv4PeerRrV4-1
+                  next_hop_address_type: ipv4
+                  next_hop_ipv4_address: 192.0.3.1
+                  next_hop_ipv6_address: ::0
+                  next_hop_mode: manual
+            router_id: 192.0.2.1
+          ethernets:
+          - connection:
+              choice: port_name
+              port_name: port1
+            ipv4_addresses:
+            - address: 192.0.2.1
+              gateway: 192.0.3.1
+              name: atePort1.IPv4-1
+              prefix: 16
+            mac: "02:00:01:01:01:02"
+            mtu: 1500
+            name: atePort1.Eth1
+          name: atePort1-1
+        - bgp:
+            ipv4_interfaces:
+            - ipv4_name: atePort1.IPv4-2
+              peers:
+              - as_number: 65001
+                as_number_width: four
+                as_type: ebgp
+                learned_information_filter:
+                  unicast_ipv4_prefix: true
+                  unicast_ipv6_prefix: true
+                name: txBgpv4Peer-2
+                peer_address: 192.0.3.1
+                v4_routes:
+                - addresses:
+                  - address: 100.1.2.1
+                    count: 2
+                    prefix: 32
+                    step: 1
+                  advanced:
+                    include_local_preference: true
+                    include_multi_exit_discriminator: true
+                    include_origin: true
+                    local_preference: 100
+                    origin: igp
+                  communities:
+                  - as_custom: 20410
+                    as_number: 65534
+                  name: txBgpv4PeerRrV4-2
+                  next_hop_address_type: ipv4
+                  next_hop_ipv4_address: 192.0.3.1
+                  next_hop_ipv6_address: ::0
+                  next_hop_mode: manual
+            router_id: 192.0.2.2
+          ethernets:
+          - connection:
+              choice: port_name
+              port_name: port1
+            ipv4_addresses:
+            - address: 192.0.2.2
+              gateway: 192.0.3.1
+              name: atePort1.IPv4-2
+              prefix: 16
+            mac: "02:00:01:01:01:03"
+            mtu: 1500
+            name: atePort1.Eth2
+          name: atePort1-2
+        - bgp:
+            ipv4_interfaces:
+            - ipv4_name: atePort2.IPv4
+              peers:
+              - as_number: 65003
+                as_number_width: four
+                as_type: ebgp
+                learned_information_filter:
+                  unicast_ipv4_prefix: true
+                  unicast_ipv6_prefix: true
+                name: rxBgpv4Peer-1
+                peer_address: 192.0.2.1
+                v4_routes:
+                - addresses:
+                  - address: 200.1.1.1
+                    count: 2
+                    prefix: 32
+                    step: 1
+                  name: rxBgpv4PeerRrV4-1
+                  next_hop_address_type: ipv4
+                  next_hop_ipv4_address: 192.0.2.1
+                  next_hop_ipv6_address: ::0
+                  next_hop_mode: manual
+              - as_number: 65004
+                as_number_width: four
+                as_type: ebgp
+                learned_information_filter:
+                  unicast_ipv4_prefix: true
+                  unicast_ipv6_prefix: true
+                name: rxBgpv4Peer-2
+                peer_address: 192.0.2.2
+                v4_routes:
+                - addresses:
+                  - address: 200.1.2.1
+                    count: 2
+                    prefix: 32
+                    step: 1
+                  name: rxBgpv4PeerRrV4-2
+                  next_hop_address_type: ipv4
+                  next_hop_ipv4_address: 192.0.2.2
+                  next_hop_ipv6_address: ::0
+                  next_hop_mode: manual
+            router_id: 192.0.3.1
+          ethernets:
+          - connection:
+              choice: port_name
+              port_name: port2
+            ipv4_addresses:
+            - address: 192.0.3.1
+              gateway: 192.0.2.1
+              name: atePort2.IPv4
+              prefix: 16
+            mac: "02:00:02:01:01:01"
+            mtu: 1500
+            name: atePort2.Eth
+          name: atePort2
+        - flows:
+          metrics:
+            enable: true
+            loss: false
+            timestamps: false
+          name: bgpv4RoutesFlow-0
+          packet:
+          - choice: ethernet
+            ethernet:
+              src:
+                choice: value
+                value: "02:00:01:01:01:01"
+          - choice: ipv4
+            ipv4:
+              dst:
+                choice: increment
+                increment:
+                  count: 2
+                  start: 200.1.1.1
+                  step: 0.0.0.1
+              src:
+                choice: increment
+                increment:
+                  count: 2
+                  start: 100.1.1.1
+                  step: 0.0.0.1
+          rate:
+            choice: pps
+            pps: "1000"
+          size:
+            choice: fixed
+            fixed: 100
+          tx_rx:
+            choice: device
+            device:
+              mode: mesh
+              rx_names:
+              - rxBgpv4PeerRrV4-1
+              tx_names:
+              - txBgpv4PeerRrV4-1
+          metrics:
+            enable: true
+            loss: false
+            timestamps: false
+          name: bgpv4RoutesFlow-1
+          packet:
+          - choice: ethernet
+            ethernet:
+              src:
+                choice: value
+                value: "02:00:01:01:01:01"
+          - choice: ipv4
+            ipv4:
+              dst:
+                choice: increment
+                increment:
+                  count: 2
+                  start: 200.1.2.1
+                  step: 0.0.0.1
+              src:
+                choice: increment
+                increment:
+                  count: 2
+                  start: 100.1.2.1
+                  step: 0.0.0.1
+          rate:
+            choice: pps
+            pps: "1000"
+          size:
+            choice: fixed
+            fixed: 100
+          tx_rx:
+            choice: device
+            device:
+              mode: mesh
+              rx_names:
+              - rxBgpv4PeerRrV4-2
+              tx_names:
+              - txBgpv4PeerRrV4-2
+        - ports:
+          location: 10.24.50.12;1;1
+          name: port1
+          location: 10.24.50.12;1;2
+          name: port2

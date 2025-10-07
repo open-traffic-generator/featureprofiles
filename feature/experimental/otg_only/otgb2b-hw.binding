@@ -24,11 +24,11 @@ ates {
   # from its topology ID to the actual port name on the device.
   ports {
     id: "port1"
-    name: "10.39.49.57;2;15"  
+    name: "10.24.50.12;1;1"  
   }
   ports {
     id: "port2"
-    name: "10.39.49.57;2;16"  
+    name: "10.24.50.12;1;2"  
   }
 }
 
