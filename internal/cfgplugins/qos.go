@@ -362,3 +362,48 @@ func applyQosPolicyOnInterfaceFromCLI(t *testing.T, dut *ondatra.DUTDevice, para
 		t.Errorf("Unsupported CLI command for dut %v %s", dut.Vendor(), dut.Name())
 	}
 }
+
+func configureOneRateTwoColorSchedulerFromOC(batch *gnmi.SetBatch, params *SchedulerParams) {
+	qos := &oc.Qos{}
+	sp := qos.GetOrCreateSchedulerPolicy(params.SchedulerName)
+	sp.Name = ygot.String(params.SchedulerName)
+	sched := sp.GetOrCreateScheduler(params.SequenceNumber)
+	sched.Sequence = ygot.Uint32(1)
+	sched.Type = oc.QosTypes_QOS_SCHEDULER_TYPE_ONE_RATE_TWO_COLOR
+	input := sched.GetOrCreateInput(params.PolicerName)
+	input.InputType = oc.Input_InputType_QUEUE
+	input.Queue = ygot.String(params.QueueName)
+	trtc := sched.GetOrCreateTwoRateThreeColor()
+	trtc.Cir = ygot.Uint64(params.CirValue)
+	trtc.Pir = ygot.Uint64(params.PirValue)
+	trtc.Bc = ygot.Uint32(params.BurstSize)
+	trtc.Be = ygot.Uint32(params.BurstSize)
+	trtc.GetOrCreateExceedAction().Drop = ygot.Bool(false)
+	trtc.GetOrCreateViolateAction().Drop = ygot.Bool(true)
+	qosPath := gnmi.OC().Qos().Config()
+	gnmi.BatchUpdate(batch, qosPath, qos)
+}
+
+func configureOneRateTwoColorSchedulerFromCLI(t *testing.T, dut *ondatra.DUTDevice, params *SchedulerParams) {
+	switch dut.Vendor() {
+	case ondatra.ARISTA:
+		cliConfig := fmt.Sprintf(`
+        policy-map type quality-of-service %s
+        class %s
+        set traffic-class %d 
+        police rate %d bps burst-size %d bytes rate %d bps burst-size %d bytes
+        !
+        `, params.SchedulerName, params.ClassName, params.QueueID, params.CirValue, params.BurstSize, params.PirValue, params.BurstSize)
+		helpers.GnmiCLIConfig(t, dut, cliConfig)
+	default:
+		t.Errorf("Unsupported CLI command for dut %v %s", dut.Vendor(), dut.Name())
+	}
+}
+
+func NewOneRateTwoColorScheduler(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.SetBatch, params *SchedulerParams) {
+	if deviations.QosTwoRateThreeColorPolicerOCUnsupported(dut) {
+		configureOneRateTwoColorSchedulerFromCLI(t, dut, params)
+	} else {
+		configureOneRateTwoColorSchedulerFromOC(batch, params)
+	}
+}
