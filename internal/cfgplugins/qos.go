@@ -373,13 +373,10 @@ func configureOneRateTwoColorSchedulerFromOC(batch *gnmi.SetBatch, params *Sched
 	input := sched.GetOrCreateInput(params.PolicerName)
 	input.InputType = oc.Input_InputType_QUEUE
 	input.Queue = ygot.String(params.QueueName)
-	trtc := sched.GetOrCreateTwoRateThreeColor()
+	trtc := sched.GetOrCreateOneRateTwoColor()
 	trtc.Cir = ygot.Uint64(params.CirValue)
-	trtc.Pir = ygot.Uint64(params.PirValue)
 	trtc.Bc = ygot.Uint32(params.BurstSize)
-	trtc.Be = ygot.Uint32(params.BurstSize)
 	trtc.GetOrCreateExceedAction().Drop = ygot.Bool(false)
-	trtc.GetOrCreateViolateAction().Drop = ygot.Bool(true)
 	qosPath := gnmi.OC().Qos().Config()
 	gnmi.BatchUpdate(batch, qosPath, qos)
 }
@@ -391,9 +388,9 @@ func configureOneRateTwoColorSchedulerFromCLI(t *testing.T, dut *ondatra.DUTDevi
         policy-map type quality-of-service %s
         class %s
         set traffic-class %d 
-        police rate %d bps burst-size %d bytes rate %d bps burst-size %d bytes
+        police cir %d bps bc %d bytes
         !
-        `, params.SchedulerName, params.ClassName, params.QueueID, params.CirValue, params.BurstSize, params.PirValue, params.BurstSize)
+        `, params.SchedulerName, params.ClassName, params.QueueID, params.CirValue, params.BurstSize)
 		helpers.GnmiCLIConfig(t, dut, cliConfig)
 	default:
 		t.Errorf("Unsupported CLI command for dut %v %s", dut.Vendor(), dut.Name())
