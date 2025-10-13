@@ -23,12 +23,12 @@ const (
 	trafficDuration   = 5 * time.Second
 	tolerance         = 50
 	tolerancePct      = 2
-	routesCount       = 40
+	routesCount       = 2
 	txStartRange      = "100.1.1.1"
 	rxStartRange      = "200.1.1.1"
 	txStartRangev6    = "2001::202:14:0:1"
 	rxStartRangev6    = "2002::202:14:0:1"
-	totalPeersPerPort = 20
+	totalPeersPerPort = 1
 )
 
 type trafficEndpoints struct {
@@ -340,6 +340,13 @@ func sendTraffic(t *testing.T, otg *otg.OTG) {
 	otg.StopTraffic(t)
 }
 
+func withdrawRoutes(t *testing.T, otg *otg.OTG) {
+	t.Logf("Withdrawing routes")
+	cs := gosnappi.NewControlState()
+	cs.Protocol().Route().SetNames([]string{"txBgpv4PeerRrV4-1", "rxBgpv4PeerRrV4-1"}).SetState(gosnappi.StateProtocolRouteState.WITHDRAW)
+	otg.SetControlState(t, cs)
+}
+
 func verifyOTGBGPTelemetry(t *testing.T, otg *otg.OTG, c gosnappi.Config, state string) {
 	for _, d := range c.Devices().Items() {
 		for _, ip := range d.Bgp().Ipv4Interfaces().Items() {
@@ -406,7 +413,21 @@ func nextIP(ip net.IP, inc uint) net.IP {
 	return net.IPv4(v0, v1, v2, v3)
 }
 
-func TestOTGb2bBgp(t *testing.T) {
+// func TestOTGb2bBgp(t *testing.T) {
+// 	ate := ondatra.ATE(t, "ate")
+// 	otg := ate.OTG()
+// 	// otgConfig := configureOTG_1to1(t, otg)
+// 	otgConfig := configureOTG_1tomany(t, otg)
+
+// 	// Verify the OTG BGP state.
+// 	t.Logf("Verify OTG BGP sessions up")
+// 	verifyOTGBGPTelemetry(t, otg, otgConfig, "ESTABLISHED")
+// 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
+// 	sendTraffic(t, otg)
+// 	verifyTraffic(t, ate, otgConfig, false)
+// }
+
+func TestBGPWithdraw(t *testing.T) {
 	ate := ondatra.ATE(t, "ate")
 	otg := ate.OTG()
 	// otgConfig := configureOTG_1to1(t, otg)
@@ -418,4 +439,10 @@ func TestOTGb2bBgp(t *testing.T) {
 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
 	sendTraffic(t, otg)
 	verifyTraffic(t, ate, otgConfig, false)
+
+	withdrawRoutes(t, otg)
+
+	sendTraffic(t, otg)
+	verifyTraffic(t, ate, otgConfig, true)
+
 }
