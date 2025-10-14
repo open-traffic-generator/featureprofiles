@@ -27,7 +27,6 @@ import (
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/gribi"
 	"github.com/openconfig/featureprofiles/internal/otgutils"
-	"github.com/openconfig/featureprofiles/internal/qoscfg"
 	"github.com/openconfig/gribigo/client"
 	"github.com/openconfig/gribigo/constants"
 	"github.com/openconfig/gribigo/fluent"
@@ -38,13 +37,13 @@ import (
 )
 
 const (
+	trafficRateLowMbps  = 1000
+	trafficRateHighMbps = 4000
 	vlanA               = 100
 	vlanB               = 200
 	ipv4PrefixLen       = 30
 	ipv6PrefixLen       = 126
 	trafficDuration     = 15 * time.Second
-	frameSize           = 512
-	packetPerSecond     = 100
 	queue1              = "QUEUE_1"
 	queue2              = "QUEUE_2"
 	classifierType      = oc.Qos_Classifier_Type_IPV4
@@ -56,13 +55,14 @@ const (
 	cirValue2           = 2000000000
 	burstSize           = 100000
 	// MPLS-in-UDP test configuration
-	mplsLabel1      = uint64(1000)
-	mplsLabel2      = uint64(2000)
-	outerIPv6Src    = "2001:db8::1"
-	outerIPv6Dst1   = "2001:db8::100"
-	outerIPv6Dst2   = "2001:db8::200"
-	innerIPv6Prefix = "2001:db8:1::/64"
-	outerDstUDPPort = uint16(6635) // RFC 7510 standard MPLS-in-UDP port
+	mplsLabel1       = uint64(1000)
+	mplsLabel2       = uint64(2000)
+	outerIPv6Src     = "2001:db8::1"
+	outerIPv6Dst1    = "2001:db8::100"
+	outerIPv6Dst2    = "2001:db8::200"
+	innerIPv6Prefix1 = "2001:db8:1::/64"
+	innerIPv6Prefix2 = "2001:db8:2::/64"
+	outerDstUDPPort  = uint16(6635) // RFC 7510 standard MPLS-in-UDP port
 
 	// gRIBI entry IDs for MPLS-in-UDP
 	mplsNHID1  = uint64(1001)
@@ -71,17 +71,10 @@ const (
 	mplsNHGID2 = uint64(2002)
 
 	// Static ARP configuration
-	magicIP  = "192.168.1.1"
-	magicMac = "02:00:00:00:00:01"
+	magicIP          = "192.168.1.1"
+	magicMac         = "02:00:00:00:00:01"
+	trafficFrameSize = 512
 )
-
-// testArgs holds the objects needed by a test case
-type testArgs struct {
-	dut    *ondatra.DUTDevice
-	ate    *ondatra.ATEDevice
-	topo   gosnappi.Config
-	client *gribi.Client
-}
 
 var (
 	atePort1Vlan1 = attrs.Attributes{Name: "ateP1VLan1", MAC: "02:00:01:01:01:01", IPv4: "192.0.2.2", IPv6: "2001:db8::2", IPv4Len: ipv4PrefixLen, IPv6Len: ipv6PrefixLen}
@@ -104,6 +97,12 @@ func TestMain(m *testing.M) {
 	fptest.RunTests(m)
 }
 
+type testCase struct {
+	name     string
+	gbpsRate uint32
+	queue    []string
+}
+
 func TestMPLSOverUDPTunnelHashing(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
 	ate := ondatra.ATE(t, "ate")
@@ -124,6 +123,25 @@ func TestMPLSOverUDPTunnelHashing(t *testing.T) {
 	configureQoS(t, dut)
 
 	configureGribi(t, dut)
+	cases := []testCase{
+		{
+			name:     "Validate that flow experiences 0 packet loss at 0.7Gbps",
+			gbpsRate: 1,
+		},
+		{
+			name:     "Validate that flow experiences ~50% packet loss at 2Gbps",
+			gbpsRate: 2,
+		},
+		{
+			name:     "DP-2.2.3 IPv6 flow label validiation",
+			gbpsRate: 0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configureflowsRate(t, ate, topo)
+		})
+	}
 
 }
 
@@ -189,9 +207,9 @@ func configureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 				InterfaceName:  inputInterfaceNameA,
 				ClassName:      targetClass,
 				CirValue:       cirValue1,
-				BurstSize:      burstSize,
+				BurstSize:      1000,
 				QueueName:      queue1,
-				QueueID:        2,
+				QueueID:        1,
 				SequenceNumber: 1,
 			},
 			interfaceName: inputInterfaceNameA,
@@ -206,13 +224,13 @@ func configureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 			},
 			scheduler: &cfgplugins.SchedulerParams{
 				SchedulerName:  schedulerNameB,
-				PolicerName:    "limit_group_B_1Gb",
+				PolicerName:    "limit_group_B_2Gb",
 				InterfaceName:  inputInterfaceNameB,
 				ClassName:      targetClass,
 				CirValue:       cirValue2,
-				BurstSize:      burstSize,
+				BurstSize:      2000,
 				QueueName:      queue2,
-				QueueID:        3,
+				QueueID:        2,
 				SequenceNumber: 2,
 			},
 			interfaceName: inputInterfaceNameB,
@@ -224,7 +242,6 @@ func configureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	// Loop through both A and B configurations
 	for _, cfg := range qosConfigs {
 		cfgplugins.NewQoSClassifierConfiguration(t, dut, qos, []cfgplugins.QosClassifier{cfg.classifier})
-		qoscfg.SetInputClassifier(t, dut, qos, cfg.interfaceName, inputClassifierType, cfg.classifier.Name)
 		cfgplugins.NewOneRateTwoColorScheduler(t, dut, qosBatch, cfg.scheduler)
 		cfgplugins.ApplyQosPolicyOnInterface(t, dut, qosBatch, cfg.scheduler)
 		gnmi.BatchUpdate(qosBatch, qosPath, qos)
@@ -350,6 +367,7 @@ func configureGribi(t *testing.T, dut *ondatra.DUTDevice) {
 	mplsNHIDs := []uint64{mplsNHID1, mplsNHID2}
 	mplsNHGIDs := []uint64{mplsNHGID1, mplsNHGID2}
 	outerIPv6Dsts := []string{outerIPv6Dst1, outerIPv6Dst2}
+	innerIPv6Dsts := []string{innerIPv6Prefix1, innerIPv6Prefix2}
 
 	var entries []fluent.GRIBIEntry
 	var wantAddResults []*client.OpResult
@@ -359,6 +377,7 @@ func configureGribi(t *testing.T, dut *ondatra.DUTDevice) {
 		nhID := mplsNHIDs[i]
 		nhgID := mplsNHGIDs[i]
 		outerIPv6Dst := outerIPv6Dsts[i]
+		innerIPv6Dst := innerIPv6Dsts[i]
 		t.Logf("Programming MPLS-in-UDP encapsulation #%d: Label=%d, NH=%d, NHG=%d", i+1, label, nhID, nhgID)
 
 		// --- Create MPLS-in-UDP encapsulation NextHop ---
@@ -380,14 +399,14 @@ func configureGribi(t *testing.T, dut *ondatra.DUTDevice) {
 			fluent.NextHopGroupEntry().
 				WithNetworkInstance(deviations.DefaultNetworkInstance(dut)).
 				WithID(nhgID).
-				AddNextHop(nhID, 1),
+				AddNextHop(nhID, uint64(i+1)),
 		)
 
 		// --- Create IPv6 route triggering MPLS-in-UDP encapsulation ---
 		entries = append(entries,
 			fluent.IPv6Entry().
 				WithNetworkInstance(deviations.DefaultNetworkInstance(dut)).
-				WithPrefix(innerIPv6Prefix).
+				WithPrefix(innerIPv6Dst).
 				WithNextHopGroup(nhgID).
 				WithNextHopGroupNetworkInstance(deviations.DefaultNetworkInstance(dut)),
 		)
@@ -405,7 +424,7 @@ func configureGribi(t *testing.T, dut *ondatra.DUTDevice) {
 				WithOperationType(constants.Add).
 				AsResult(),
 			fluent.OperationResult().
-				WithIPv6Operation(innerIPv6Prefix).
+				WithIPv6Operation(innerIPv6Dst).
 				WithProgrammingResult(fluent.InstalledInRIB).
 				WithOperationType(constants.Add).
 				AsResult(),
@@ -416,6 +435,31 @@ func configureGribi(t *testing.T, dut *ondatra.DUTDevice) {
 }
 
 func programBasicEntries(t *testing.T, dut *ondatra.DUTDevice, c *gribi.Client) {
+
+	// Set up static ARP configuration for gRIBI NH entries
+	if deviations.GRIBIMACOverrideWithStaticARP(dut) {
+		b := &gnmi.SetBatch{}
+		cfg := cfgplugins.SecondaryIPConfig{
+			Entries: []cfgplugins.SecondaryIPEntry{
+				{PortName: "port2", PortDummyAttr: dutPort2DummyIP, DummyIP: otgPort2DummyIP.IPv4, MagicMAC: magicMac},
+			},
+		}
+		sb := cfgplugins.StaticARPWithSecondaryIP(t, dut, b, cfg)
+		sb.Set(t, dut)
+	} else if deviations.GRIBIMACOverrideStaticARPStaticRoute(dut) {
+		b := &gnmi.SetBatch{}
+		cfg := cfgplugins.StaticARPConfig{
+			Entries: []cfgplugins.StaticARPEntry{
+				{PortName: "port2", MagicIP: magicIP, MagicMAC: magicMac},
+			},
+		}
+		sb := cfgplugins.StaticARPWithMagicUniversalIP(t, dut, b, cfg)
+		sb.Set(t, dut)
+	}
+
+	// Allow time for configuration to be applied
+	time.Sleep(10 * time.Second)
+
 	t.Log("Setting up basic routing infrastructure for MPLS-in-UDP (looped two NH/NHG entries on same port)")
 
 	p2 := dut.Port(t, "port2")
@@ -463,4 +507,54 @@ func programBasicEntries(t *testing.T, dut *ondatra.DUTDevice, c *gribi.Client) 
 		c.AddIPv6(t, pair.route+"/128", pair.nhgID, deviations.DefaultNetworkInstance(dut),
 			deviations.DefaultNetworkInstance(dut), fluent.InstalledInFIB)
 	}
+}
+
+func configureflowsRate(t *testing.T, ate *ondatra.ATEDevice, topo gosnappi.Config) {
+	sources := []struct {
+		name   string
+		vlan   attrs.Attributes
+		rate   uint32
+		vlanId uint32
+	}{
+		{"ipv4Flow1", atePort1Vlan1, 2, 100},
+		{"ipv4Flow2", atePort1Vlan2, 4, 200},
+	}
+
+	topo.Flows().Clear()
+
+	for _, src := range sources {
+		flow := topo.Flows().Add().SetName(src.name)
+		flow.Metrics().SetEnable(true)
+		flow.TxRx().Device().
+			SetTxNames([]string{src.vlan.Name + ".IPv4"}).
+			SetRxNames([]string{atePort2.Name + ".IPv4"})
+		// flow.Size().SetFixed(trafficFrameSize)
+		flow.Rate().SetGbps(uint32(src.rate))
+		flow.Duration().
+			SetFixedSeconds(gosnappi.NewFlowFixedSeconds().
+				SetSeconds(float32(trafficDuration.Seconds())))
+
+		eth := flow.Packet().Add().Ethernet()
+		eth.Src().SetValue(src.vlan.MAC)
+		eth.Dst().Auto()
+
+		flow.Packet().Add().Vlan().Id().SetValue(src.vlanId)
+
+		ipv4 := flow.Packet().Add().Ipv4()
+		ipv4.Src().SetValue(src.vlan.IPv4)
+		ipv4.Dst().SetValue(atePort2.IPv4)
+	}
+
+	ate.OTG().PushConfig(t, topo)
+	ate.OTG().StartProtocols(t)
+	otgutils.WaitForARP(t, ate.OTG(), topo, "IPv4")
+
+	t.Logf("Sending traffic flows: ")
+	ate.OTG().StartTraffic(t)
+	time.Sleep(10 * time.Second)
+	ate.OTG().StopTraffic(t)
+	time.Sleep(10 * time.Second)
+
+	otgutils.LogFlowMetrics(t, ate.OTG(), topo)
+
 }
