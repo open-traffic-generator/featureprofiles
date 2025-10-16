@@ -74,6 +74,7 @@ const (
 	magicIP          = "192.168.1.1"
 	magicMac         = "02:00:00:00:00:01"
 	trafficFrameSize = 512
+	lossVariation    = 0.01
 )
 
 var (
@@ -123,25 +124,17 @@ func TestMPLSOverUDPTunnelHashing(t *testing.T) {
 	configureQoS(t, dut)
 
 	configureGribi(t, dut)
-	cases := []testCase{
-		{
-			name:     "Validate that flow experiences 0 packet loss at 0.7Gbps",
-			gbpsRate: 1,
-		},
-		{
-			name:     "Validate that flow experiences ~50% packet loss at 2Gbps",
-			gbpsRate: 2,
-		},
-		{
-			name:     "DP-2.2.3 IPv6 flow label validiation",
-			gbpsRate: 0,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			configureflowsRate(t, ate, topo)
-		})
-	}
+
+	t.Run("Validate that flow experiences 0 packet loss at 0.7Gbps", func(t *testing.T) {
+		validateFlowRate(t, ate, topo, 1, 0)
+	})
+	t.Run("Validate that flow experiences ~50% packet loss at 2Gbps", func(t *testing.T) {
+		validateFlowRate(t, ate, topo, 2, 0.5)
+	})
+
+	// t.Run("DP-2.2.3 IPv6 flow label validiation", func(t *testing.T) {
+	// 	validateFlowRate(t, ate, topo,)
+	// })
 
 }
 
@@ -509,15 +502,22 @@ func programBasicEntries(t *testing.T, dut *ondatra.DUTDevice, c *gribi.Client) 
 	}
 }
 
-func configureflowsRate(t *testing.T, ate *ondatra.ATEDevice, topo gosnappi.Config) {
+func validateFlowRate(t *testing.T, ate *ondatra.ATEDevice, topo gosnappi.Config, trafficRate uint32, lossPct float32) {
 	sources := []struct {
 		name   string
 		vlan   attrs.Attributes
 		rate   uint32
 		vlanId uint32
 	}{
-		{"ipv4Flow1", atePort1Vlan1, 2, 100},
-		{"ipv4Flow2", atePort1Vlan2, 4, 200},
+		{"ipv4Flow1", atePort1Vlan1, trafficRate, 100},
+		{"ipv4Flow2", atePort1Vlan2, trafficRate * 2, 200},
+	}
+
+	abs := func(num int) int {
+		if num < 0 {
+			return -num
+		}
+		return num
 	}
 
 	topo.Flows().Clear()
@@ -556,5 +556,33 @@ func configureflowsRate(t *testing.T, ate *ondatra.ATEDevice, topo gosnappi.Conf
 	time.Sleep(10 * time.Second)
 
 	otgutils.LogFlowMetrics(t, ate.OTG(), topo)
+
+	for _, src := range sources {
+		flowMetrics := gnmi.Get(t, ate.OTG(), gnmi.OTG().Flow(src.name).State())
+		sentPackets := *flowMetrics.Counters.OutPkts
+		receivedPackets := *flowMetrics.Counters.InPkts
+
+		if sentPackets == 0 {
+			t.Errorf("No packets transmitted")
+		}
+
+		if receivedPackets == 0 {
+			t.Errorf("No packets received")
+		}
+		lostPackets := abs(int(receivedPackets - sentPackets))
+		switch lossPct {
+		case 0:
+			if lostPackets != 0 {
+				t.Errorf("Expected 0 lost packets, but got %d out of %d lost packets", lostPackets, sentPackets)
+			}
+		default:
+			expectedLostPackets := int(float32(sentPackets) * lossPct)
+			lostPacketsVariation := int(float64(expectedLostPackets) * lossVariation)
+			if lostPackets < expectedLostPackets-lostPacketsVariation || lostPackets > expectedLostPackets+lostPacketsVariation {
+				t.Errorf("Expected lost packets to be within [%d, %d], but got %d", expectedLostPackets-lostPacketsVariation, expectedLostPackets+lostPacketsVariation, lostPackets)
+			}
+		}
+
+	}
 
 }
