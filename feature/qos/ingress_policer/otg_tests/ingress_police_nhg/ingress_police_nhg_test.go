@@ -37,23 +37,19 @@ import (
 )
 
 const (
-	trafficRateLowMbps  = 1000
-	trafficRateHighMbps = 4000
-	vlanA               = 100
-	vlanB               = 200
-	ipv4PrefixLen       = 30
-	ipv6PrefixLen       = 126
-	trafficDuration     = 15 * time.Second
-	queue1              = "QUEUE_1"
-	queue2              = "QUEUE_2"
-	classifierType      = oc.Qos_Classifier_Type_IPV4
-	inputClassifierType = oc.Input_Classifier_Type_IPV4
-	schedulerNameA      = "group_A"
-	schedulerNameB      = "group_B"
-	targetClass         = "class-default"
-	cirValue1           = 1000000000
-	cirValue2           = 2000000000
-	burstSize           = 100000
+	vlanA           = 100
+	vlanB           = 200
+	ipv4PrefixLen   = 30
+	ipv6PrefixLen   = 126
+	trafficDuration = 15 * time.Second
+	queue1          = "QUEUE_1"
+	queue2          = "QUEUE_2"
+	classifierType  = oc.Qos_Classifier_Type_IPV4
+	schedulerNameA  = "group_A"
+	schedulerNameB  = "group_B"
+	targetClass     = "class-default"
+	cirValue1       = 1000000000
+	cirValue2       = 2000000000
 	// MPLS-in-UDP test configuration
 	mplsLabel1       = uint64(1000)
 	mplsLabel2       = uint64(2000)
@@ -63,18 +59,15 @@ const (
 	innerIPv6Prefix1 = "2001:db8:1::/64"
 	innerIPv6Prefix2 = "2001:db8:2::/64"
 	outerDstUDPPort  = uint16(6635) // RFC 7510 standard MPLS-in-UDP port
-
 	// gRIBI entry IDs for MPLS-in-UDP
 	mplsNHID1  = uint64(1001)
 	mplsNHGID1 = uint64(2001)
 	mplsNHID2  = uint64(1002)
 	mplsNHGID2 = uint64(2002)
-
 	// Static ARP configuration
-	magicIP          = "192.168.1.1"
-	magicMac         = "02:00:00:00:00:01"
-	trafficFrameSize = 512
-	lossVariation    = 0.01
+	magicIP       = "192.168.1.1"
+	magicMac      = "02:00:00:00:00:01"
+	lossVariation = 0.01
 )
 
 var (
