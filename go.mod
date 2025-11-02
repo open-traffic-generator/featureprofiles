@@ -2,6 +2,10 @@ module github.com/openconfig/featureprofiles
 
 go 1.24.7
 
+replace github.com/open-traffic-generator/snappi/gosnappi => github.com/open-traffic-generator/snappi/gosnappi v1.40.1-0.20251010052756-fb9560156f76
+
+replace github.com/openconfig/ondatra => github.com/open-traffic-generator/ondatra v0.0.0-20251031115520-6c0307fb0f59
+
 require (
 	cloud.google.com/go/pubsub v1.45.1
 	cloud.google.com/go/storage v1.49.0
