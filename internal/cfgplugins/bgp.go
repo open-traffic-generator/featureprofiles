@@ -184,6 +184,7 @@ type BMPConfigParams struct {
 	DutAS        uint32
 	AteAS        uint32
 	BGPObj       *oc.NetworkInstance_Protocol_Bgp
+	Source string
 	LocalAddr    string
 	StationAddr  string
 	StationPort  uint16
@@ -786,11 +787,11 @@ func ConfigureBMP(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.SetBatch, cf
 		bgp monitoring
 		! BMP station
 		monitoring station BMP_STN1
-		update-source Ethernet3
+		update-source %s
 		statistics
-		connection address 192.0.3.2
-		connection mode active port 10123
-		`, cfgParams.DutAS, cfgParams.StationPort, cfgParams.StationAddr, cfgParams.StatsTimeOut)
+		connection address %s
+		connection mode active port %d
+		`, cfgParams.DutAS, cfgParams.Source, cfgParams.StationAddr, cfgParams.StationPort)
 		helpers.GnmiCLIConfig(t, dut, BMPRouteConfig)
 	} else {
 		// TODO: BMP support is not yet available, so the code below is commented out and will be enabled once BMP is implemented.

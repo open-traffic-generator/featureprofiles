@@ -21,9 +21,7 @@ const (
 	ate2AS         = 64531
 	plenIPv4       = 30
 	plenIPv6       = 126
-	bmpStationIP   = "10.23.15.58"
 	bmpStationPort = 7039
-	statsTimeout   = 60
 	host1IPv4Start = "192.168.0.0"
 	host1IPv6Start = "2001:db8:100::"
 	host2IPv4Start = "10.200.0.0"
@@ -107,9 +105,9 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) *gnmi.SetBatch {
 
 	bmpConfigParams := cfgplugins.BMPConfigParams{
 		DutAS:        dutAS,
+		Source: p2.Name(),
 		StationPort:  bmpStationPort,
-		StationAddr:  bmpStationIP,
-		StatsTimeOut: statsTimeout,
+		StationAddr:  ateP2.IPv4,
 	}
 
 	batch := &gnmi.SetBatch{}
@@ -257,7 +255,7 @@ func configureBMPOnATEDevice(t *testing.T, cfg gosnappi.Config, params ateConfig
 	bmpServer := bmpIntf.Servers().Add()
 	bmpServer.SetName(dev.Name() + ".bmp")
 	bmpServer.SetClientIp(params.dutPortAttrs.IPv4)   // Connected reachable DUT IP 
-	bmpServer.Connection().Passive().SetListenPort(10123)   // BMP port configured on DUT 
+	bmpServer.Connection().Passive().SetListenPort(bmpStationPort)   // BMP port configured on DUT 
 
 }
 
