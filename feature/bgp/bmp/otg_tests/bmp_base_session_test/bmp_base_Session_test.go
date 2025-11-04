@@ -1,18 +1,19 @@
 package bmp_base_session_test
 
 import (
-	"fmt"
-	"net"
 	"testing"
+	"time"
 
 	"github.com/open-traffic-generator/snappi/gosnappi"
 	"github.com/openconfig/featureprofiles/internal/attrs"
 	"github.com/openconfig/featureprofiles/internal/cfgplugins"
+	"github.com/openconfig/ygnmi/ygnmi"
 
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
+	otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
 )
 
 const (
@@ -82,14 +83,6 @@ type ateConfigParams struct {
 	ateAS         uint32
 	hostIPv4Start string
 	hostIPv6Start string
-}
-
-func (ip *ipAddr) cidr(t *testing.T) string {
-	_, net, err := net.ParseCIDR(fmt.Sprintf("%s/%d", ip.address, ip.prefix))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return net.String()
 }
 
 // TestMain is the entry point for the test suite.
@@ -214,12 +207,7 @@ func configureBGPOnATEDevice(t *testing.T, cfg gosnappi.Config, params ateConfig
 	// Advertise host routes
 	addBGPRoutes(v4Peer.V4Routes().Add(), params.atePortAttrs.Name+".Host.v4", params.hostIPv4Start, hostIPv4PfxLen, routeCountV4, ip4.Address())
 	addBGPRoutes(v6Peer.V6Routes().Add(), params.atePortAttrs.Name+".Host.v6", params.hostIPv6Start, hostIPv6PfxLen, routeCountV6, ip6.Address())
-	// // --- BMP Configuration ---
-	// TODO: Currently BMP configuration not yet support, uncomment the code once implemented.
-	// bmp := dev.Bgp().Bmp().Servers().Add().SetName("BMP_SERVER")
-	// bmp.SetPort(bmpStationPort)    // match DUT BMP port
-	// bmp.SetAddress(ip4.Address())  // ATE listening address
-	// bmp.SetKeepalive(statsTimeout) // optional, in seconds
+
 }
 
 // configureATEDevice configures the ports along with the associated protocols.
@@ -324,22 +312,23 @@ func verifyBMPSessionOnDUT(t *testing.T) {
 	// t.Logf("bmp session telemetry verified successfully: LocalAddr=%s, Station=%s:%d, Status=UP, Policy=POST_POLICY", state.GetLocalAddress(), state.GetAddress(), state.GetPort())
 }
 
-func verifyBMPSessionOnATE(t *testing.T) {
+func verifyBMPSessionOnATE(t *testing.T, ate *ondatra.ATEDevice) {
 	t.Helper()
 	t.Log("Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.")
 	// TODO: Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.
-	// otg := ate.OTG()
+	otg := ate.OTG()
 
-	// bmpPeerPath := gnmi.OTG().BgpPeer(atePort2.Name + ".BGPv4.Peer").Bmp().Server(bmpServerName).Peer(dutPort2.IPv4)
-	// _, ok := gnmi.Watch(t, otg, bmpPeerPath.SessionState().State(), 2*time.Minute, func(val *ygnmi.Value[otgtelemetry.E_BmpPeer_SessionState]) bool {
-	// 	state, ok := val.Val()
-	// 	return ok && state == otgtelemetry.BmpPeer_SessionState_UP
-	// }).Await(t)
-	// if !ok {
-	// 	fptest.LogQuery(t, "ATE BMP session state", bmpPeerPath.State(), gnmi.Get(t, otg, bmpPeerPath.State()))
-	// 	t.Fatalf("ATE did not see BMP session as UP")
-	// }
-	// t.Log("ATE reports BMP session is UP")
+	bmpServer := gnmi.OTG().BmpServer("atePort2.bmp")
+	t.Log("Anish",gnmi.Get(t, otg, bmpServer.SessionState().State()))
+	_, ok := gnmi.Watch(t, otg, bmpServer.SessionState().State(), 1*time.Minute, func(val *ygnmi.Value[otgtelemetry.E_BmpServer_SessionState]) bool {
+		state, ok := val.Val()
+		return ok && state == otgtelemetry.BmpServer_SessionState_UP
+	}).Await(t)
+	if !ok {
+		fptest.LogQuery(t, "ATE BMP session state", bmpServer.State(), gnmi.Get(t, otg, bmpServer.State()))
+		t.Fatalf("ATE did not see BMP session as UP")
+	}
+	t.Log("ATE reports BMP session is UP")
 }
 
 func verifyBMPStatisticsReporting(t *testing.T) {
@@ -399,7 +388,7 @@ func TestBMPBaseSession(t *testing.T) {
 				verifyBMPSessionOnDUT(t)
 
 				t.Log("Verify BMP session on ATE")
-				verifyBMPSessionOnATE(t)
+				verifyBMPSessionOnATE(t, ate)
 			},
 		},
 		{
