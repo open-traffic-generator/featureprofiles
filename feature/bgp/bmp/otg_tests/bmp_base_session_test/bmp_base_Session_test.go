@@ -237,7 +237,6 @@ func configureBMPOnATEDevice(t *testing.T, cfg gosnappi.Config, params ateConfig
 	bgpV6.Peers().Add().SetName(params.atePortAttrs.Name + ".BGPv6.Peer").SetPeerAddress(params.dutPortAttrs.IPv6).SetAsNumber(params.ateAS).SetAsType(peerTypeV6)
 
 	// --- BMP Configuration ---
-	// TODO: Currently BMP configuration not yet support, uncomment the code once implemented.
 	bmpIntf := dev.Bmp().Ipv4Interfaces().Add()
 	bmpIntf.SetIpv4Name(ip4.Name())  //Name of the IPv4 intf on which you want to run BMP 
 	bmpServer := bmpIntf.Servers().Add()
@@ -259,104 +258,25 @@ func addBGPRoutes[R any](routes R, name, startAddress string, prefixLen, count u
 	}
 }
 
-func verifyBMPSessionOnDUT(t *testing.T) {
-	t.Helper()
-	t.Log("Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.")
-	// // TODO: Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.
-	// bmpStationPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Global().Bmp().Station("BMP_STN1")
-
-	// // --- Watch for BMP session to reach UP state ---
-	// statusPath := bmpStationPath.ConnectionStatus().State()
-	// _, ok := gnmi.Watch(t, dut, statusPath, 2*time.Minute, func(val *ygnmi.Value[oc.E_BgpTypes_BMPStationConnectionMode]) bool {
-	// 	v, present := val.Val()
-	// 	return present && v == oc.BgpTypes_BMPStationConnectionMode_ACTIVE
-	// }).Await(t)
-
-	// if !ok {
-	// 	t.Fatalf("BMP session status is not UP. Got: %v", gnmi.Get(t, dut, statusPath))
-	// }
-
-	// // --- Retrieve complete BMP station state ---
-	// state := gnmi.Get(t, dut, bmpStationPath.State())
-
-	// // Verify local-address
-	// if got := state.GetLocalAddress(); got != dutPort2.IPv4 {
-	// 	t.Errorf("bmp Local Address mismatch: got %s, want %s", got, dutPort2.IPv4)
-	// }
-
-	// // Verify station address
-	// if got := state.GetAddress(); got != atePort2.IPv4 {
-	// 	t.Errorf("bmp Station Address mismatch: got %s, want %s", got, atePort2.IPv4)
-	// }
-
-	// // Verify station port
-	// if got := state.GetPort(); got != bmpStationPort {
-	// 	t.Errorf("bmp Station Port mismatch: got %d, want %d", got, bmpStationPort)
-	// }
-
-	// // Verify connection-status is UP
-	// if got := state.GetConnectionStatus(); got != oc.BgpTypes_BMPStationConnectionStatus_UP {
-	// 	t.Errorf("bmp connection status mismatch: got %v, want UP", got)
-	// }
-
-	// // Verify policy type (post-policy)
-	// if got := state.GetPolicyType(); got != oc.BgpTypes_BMPPolicyType_POST_POLICY {
-	// 	t.Errorf("bmp Policy Type mismatch: got %v, want POST_POLICY", got)
-	// }
-
-	// // Verify uptime > 0
-	// if got := state.GetUptime(); got == 0 {
-	// 	t.Errorf("bmp Uptime is 0, expected non-zero uptime")
-	// }
-
-	// t.Logf("bmp session telemetry verified successfully: LocalAddr=%s, Station=%s:%d, Status=UP, Policy=POST_POLICY", state.GetLocalAddress(), state.GetAddress(), state.GetPort())
-}
 
 func verifyBMPSessionOnATE(t *testing.T, ate *ondatra.ATEDevice) {
 	t.Helper()
-	t.Log("Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.")
-	// TODO: Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.
 	otg := ate.OTG()
 
 	bmpServer := gnmi.OTG().BmpServer("atePort2.bmp")
-	t.Log("Anish",gnmi.Get(t, otg, bmpServer.SessionState().State()))
+
 	_, ok := gnmi.Watch(t, otg, bmpServer.SessionState().State(), 1*time.Minute, func(val *ygnmi.Value[otgtelemetry.E_BmpServer_SessionState]) bool {
 		state, ok := val.Val()
 		return ok && state == otgtelemetry.BmpServer_SessionState_UP
 	}).Await(t)
 	if !ok {
 		fptest.LogQuery(t, "ATE BMP session state", bmpServer.State(), gnmi.Get(t, otg, bmpServer.State()))
-		t.Fatalf("ATE did not see BMP session as UP")
+		t.Fatalf("BMP Session state is not UP")
 	}
-	t.Log("ATE reports BMP session is UP")
+	fptest.LogQuery(t, "ATE BMP session state", bmpServer.State(), gnmi.Get(t, otg, bmpServer.State()))
+	t.Log("BMP session is UP")
 }
 
-func verifyBMPStatisticsReporting(t *testing.T) {
-	t.Helper()
-	t.Log("Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.")
-}
-
-func verifyBMPPostPolicyRouteMonitoring(t *testing.T) {
-	t.Helper()
-	t.Log("Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.")
-	// TODO: Currently, BMP is not implemented on OTG yet; the below code will be uncommented once BMP support is available.
-	// otg := ate.OTG()
-	// bmpPeerPath := gnmi.OTG().BgpPeer(atePort2.Name + ".BGPv4.Peer").Bmp().Server(bmpServerName).Peer(dutPort2.IPv4)
-
-	// reportedV4 := gnmi.Get(t, otg, bmpPeerPath.UnicastPrefixesV4().Reported().State())
-	// if reportedV4 != routeCount {
-	// 	t.Errorf("number of reported IPv4 prefixes at BMP station is incorrect: got %d, want %d", reportedV4, routeCount)
-	// } else {
-	// 	t.Logf("Successfully received %d IPv4 routes at BMP station as expected.", reportedV4)
-	// }
-
-	// reportedV6 := gnmi.Get(t, otg, bmpPeerPath.UnicastPrefixesV6().Reported().State())
-	// if reportedV6 != routeCount {
-	// 	t.Errorf("number of reported IPv6 prefixes at BMP station is incorrect: got %d, want %d", reportedV6, routeCount)
-	// } else {
-	// 	t.Logf("Successfully received %d IPv6 routes at BMP station as expected.", reportedV6)
-	// }
-}
 
 func TestBMPBaseSession(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
@@ -384,25 +304,9 @@ func TestBMPBaseSession(t *testing.T) {
 		{
 			name: "1.1.1_Verify_BMP_Session_Establishment",
 			fn: func(t *testing.T) {
-				t.Log("Verify BMP session on DUT")
-				verifyBMPSessionOnDUT(t)
 
 				t.Log("Verify BMP session on ATE")
 				verifyBMPSessionOnATE(t, ate)
-			},
-		},
-		{
-			name: "1.1.2_Verify_Statisitics_Reporting",
-			fn: func(t *testing.T) {
-				t.Log("Verify BMP session on DUT")
-				verifyBMPStatisticsReporting(t)
-			},
-		},
-		{
-			name: "1.1.3_Verify_Route_Monitoring_Post_Policy",
-			fn: func(t *testing.T) {
-				t.Log("Verify Route Monitoring Post Policy on DUT")
-				verifyBMPPostPolicyRouteMonitoring(t)
 			},
 		},
 	}
