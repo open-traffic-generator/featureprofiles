@@ -456,8 +456,8 @@ func TestBMPBaseSession(t *testing.T) {
 		{
 			name: "1.1.3_Verify_Route_Monitoring_Post_Policy",
 			fn: func(t *testing.T) {
-				t.Log("Verify Route Monitoring Post Policy on DUT")
 
+				t.Log("Verify Route Monitoring Post Policy on DUT")
 				verifyBMPPostPolicyRouteMonitoring(t, ate, bmpName)
 			},
 		},
