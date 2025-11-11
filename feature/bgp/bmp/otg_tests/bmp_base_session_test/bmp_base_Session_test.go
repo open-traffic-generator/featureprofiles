@@ -7,7 +7,9 @@ import (
 	"github.com/open-traffic-generator/snappi/gosnappi"
 	"github.com/openconfig/featureprofiles/internal/attrs"
 	"github.com/openconfig/featureprofiles/internal/cfgplugins"
+	"github.com/openconfig/featureprofiles/internal/deviations"
 	"github.com/openconfig/ygnmi/ygnmi"
+	"github.com/openconfig/ygot/ygot"
 
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/ondatra"
@@ -17,20 +19,34 @@ import (
 )
 
 const (
-	dutAS          = 64520
-	ate1AS         = 64530
-	plenIPv4       = 30
-	plenIPv6       = 126
-	bmpStationPort = 7039
-	host1IPv4Start = "192.168.0.0"
-	host1IPv6Start = "2001:db8:100::"
-	host2IPv4Start = "10.200.0.0"
-	host2IPv6Start = "2001:db8:110::"
-	hostIPv4PfxLen = 24
-	hostIPv6PfxLen = 64
-	routeCountV4   = 10
-	routeCountV6   = 10
-	bmpName        = "atebmp"
+	dutAS                  = 64520
+	ate1AS                 = 64530
+	plenIPv4               = 30
+	plenIPv6               = 126
+	bmpStationPort         = 7039
+	prefix1v4              = "192.168.0.0"
+	prefix1v4Subnet        = 24
+	prefix2v4              = "172.16.0.0"
+	prefix2v4Subnet        = 16
+	prefix1v6              = "2001:DB8:1::"
+	prefix1v6Subnet        = 48
+	prefix2v6              = "2001:DB8::"
+	prefix2v6Subnet        = 32
+	routeCountV4           = 10
+	routeCountV6           = 10
+	bmpName                = "atebmp"
+	prefixSet              = "PREFIX-SET"
+	ipPrefixSet            = "172.16.0.0/16"
+	prefixSubnetRange      = "16..32"
+	prefixSetV6            = "PREFIX-SET-V6"
+	ipV6PrefixSet          = "2001:DB8::/32"
+	prefixV6SubnetRange    = "32..128"
+	policyName             = "ALLOW"
+	prePolicyV4RouteCount  = 20
+	prePolicyV6RouteCount  = 20
+	postPolicyV4RouteCount = 19
+	postPolicyV6RouteCount = 9
+	timeout                = 60 * time.Second
 )
 
 var (
@@ -127,6 +143,83 @@ func configureDUTBGPNeighbors(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.
 	for _, n := range neighbors {
 		cfgplugins.AppendBGPNeighbor(t, dut, batch, bgp, n)
 	}
+
+	rpl, err := configureBGPPolicy()
+	if err != nil {
+		t.Fatalf("Failed to configure BGP Policy: %v", err)
+	}
+	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().Config(), rpl)
+
+	pol := applyBgpPolicy(policyName, dut, true)
+
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+
+	gnmi.Update(t, dut, dutConfPath.Config(), pol)
+}
+
+func configureBGPPolicy() (*oc.RoutingPolicy, error) {
+	d := &oc.Root{}
+	rp := d.GetOrCreateRoutingPolicy()
+	pdef := rp.GetOrCreatePolicyDefinition(policyName)
+
+	pset := rp.GetOrCreateDefinedSets().GetOrCreatePrefixSet(prefixSet)
+	pset.GetOrCreatePrefix(ipPrefixSet, prefixSubnetRange)
+	pset.SetMode(oc.PrefixSet_Mode_IPV4)
+
+	stmt, err := pdef.AppendNewStatement("10")
+	if err != nil {
+		return nil, err
+	}
+	stmt.GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_REJECT_ROUTE
+	stmt.GetOrCreateConditions().GetOrCreateMatchPrefixSet().PrefixSet = ygot.String(prefixSet)
+
+	pset2 := rp.GetOrCreateDefinedSets().GetOrCreatePrefixSet(prefixSetV6)
+	pset2.SetMode(oc.PrefixSet_Mode_IPV6)
+	pset2.GetOrCreatePrefix(ipV6PrefixSet, prefixV6SubnetRange)
+
+	stmt2, err := pdef.AppendNewStatement("20")
+	if err != nil {
+		return nil, err
+	}
+	stmt2.GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_REJECT_ROUTE
+	stmt2.GetOrCreateConditions().GetOrCreateMatchPrefixSet().PrefixSet = ygot.String(prefixSetV6)
+
+	stmt3, err := pdef.AppendNewStatement("30")
+	if err != nil {
+		return nil, err
+	}
+	stmt3.GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE
+
+	return rp, nil
+
+}
+
+func applyBgpPolicy(policyName string, dut *ondatra.DUTDevice, isV4 bool) *oc.NetworkInstance_Protocol {
+	d := &oc.Root{}
+	ni1 := d.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+	niProto := ni1.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	bgp := niProto.GetOrCreateBgp()
+
+	pg := bgp.GetOrCreatePeerGroup("BGP-PEER-GROUP-V4")
+	pg.PeerGroupName = ygot.String("BGP-PEER-GROUP-V4")
+
+	if deviations.RoutePolicyUnderAFIUnsupported(dut) {
+		// policy under peer group
+		pg.GetOrCreateApplyPolicy().ImportPolicy = []string{policyName}
+		return niProto
+	}
+
+	aftType := oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST
+	if isV4 {
+		aftType = oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST
+	}
+
+	afisafi := pg.GetOrCreateAfiSafi(aftType)
+	afisafi.Enabled = ygot.Bool(true)
+	rpl := afisafi.GetOrCreateApplyPolicy()
+	rpl.SetImportPolicy([]string{policyName})
+
+	return niProto
 }
 
 // configureATE builds and returns the OTG configuration for the ATE topology.
@@ -143,21 +236,17 @@ func configureATE(t *testing.T, ate *ondatra.ATEDevice, bmpName string) gosnappi
 	atePort2 := ateConfig.Ports().Add().SetName(p2.ID())
 
 	ateP1ConfigParams := ateConfigParams{
-		atePort:       atePort1,
-		atePortAttrs:  ateP1,
-		dutPortAttrs:  dutP1,
-		ateAS:         ate1AS,
-		hostIPv4Start: host1IPv4Start,
-		hostIPv6Start: host1IPv6Start,
+		atePort:      atePort1,
+		atePortAttrs: ateP1,
+		dutPortAttrs: dutP1,
+		ateAS:        ate1AS,
 	}
 
 	ateP2ConfigParams := ateConfigParams{
-		atePort:       atePort2,
-		atePortAttrs:  ateP2,
-		dutPortAttrs:  dutP2,
-		bmpName:       bmpName,
-		hostIPv4Start: host2IPv4Start,
-		hostIPv6Start: host2IPv6Start,
+		atePort:      atePort2,
+		atePortAttrs: ateP2,
+		dutPortAttrs: dutP2,
+		bmpName:      bmpName,
 	}
 
 	// ATE Device 1 (EBGP)
@@ -194,8 +283,11 @@ func configureBGPOnATEDevice(t *testing.T, cfg gosnappi.Config, params ateConfig
 	v6Peer := bgpV6.Peers().Add().SetName(params.atePortAttrs.Name + ".BGPv6.Peer").SetPeerAddress(params.dutPortAttrs.IPv6).SetAsNumber(params.ateAS).SetAsType(peerTypeV6)
 
 	// Advertise host routes
-	addBGPRoutes(v4Peer.V4Routes().Add(), params.atePortAttrs.Name+".Host.v4", params.hostIPv4Start, hostIPv4PfxLen, routeCountV4, ip4.Address())
-	addBGPRoutes(v6Peer.V6Routes().Add(), params.atePortAttrs.Name+".Host.v6", params.hostIPv6Start, hostIPv6PfxLen, routeCountV6, ip6.Address())
+	addBGPRoutes(v4Peer.V4Routes().Add(), params.atePortAttrs.Name+".Host.v4.1", prefix1v4, prefix1v4Subnet, routeCountV4, ip4.Address())
+	addBGPRoutes(v6Peer.V6Routes().Add(), params.atePortAttrs.Name+".Host.v6.1", prefix1v6, prefix1v6Subnet, routeCountV6, ip6.Address())
+
+	addBGPRoutes(v4Peer.V4Routes().Add(), params.atePortAttrs.Name+".Host.v4.2", prefix2v4, prefix2v4Subnet, routeCountV4, ip4.Address())
+	addBGPRoutes(v6Peer.V6Routes().Add(), params.atePortAttrs.Name+".Host.v6.2", prefix2v6, prefix2v6Subnet, routeCountV6, ip6.Address())
 
 }
 
@@ -254,24 +346,73 @@ func verifyBMPSessionOnATE(t *testing.T, ate *ondatra.ATEDevice, bmpName string)
 }
 
 func verifyBMPStatisticsReporting(t *testing.T, ate *ondatra.ATEDevice, bmpName string) {
-    t.Helper()
-    t.Log("Checking BMP statistics reporting on ATE before and after the interval")
+	t.Helper()
+	t.Log("Checking BMP statistics reporting on ATE before and after the interval")
 
-    bmpServer := gnmi.OTG().BmpServer(bmpName)
+	bmpServer := gnmi.OTG().BmpServer(bmpName)
 
-    initialStatCounter := gnmi.Get(t, ate.OTG(), bmpServer.Counters().StatisticsMessagesReceived().State())
-    t.Logf("Initial BMP statistics counter: %v", initialStatCounter)
+	initialStatCounter := gnmi.Get(t, ate.OTG(), bmpServer.Counters().StatisticsMessagesReceived().State())
+	t.Logf("Initial BMP statistics counter: %v", initialStatCounter)
 
-    time.Sleep(60 * time.Second)
+	time.Sleep(60 * time.Second)
 
-    updatedStatCounter := gnmi.Get(t, ate.OTG(), bmpServer.Counters().StatisticsMessagesReceived().State())
-    t.Logf("Updated BMP statistics counter: %v", updatedStatCounter)
+	updatedStatCounter := gnmi.Get(t, ate.OTG(), bmpServer.Counters().StatisticsMessagesReceived().State())
+	t.Logf("Updated BMP statistics counter: %v", updatedStatCounter)
 
-    if updatedStatCounter <= initialStatCounter {
-        t.Errorf("BMP statistics counter did not increment after 60 seconds. Initial: %v, Updated: %v", initialStatCounter, updatedStatCounter)
-    } else {
-        t.Log("BMP statistics counter incremented as expected.")
-    }
+	if updatedStatCounter <= initialStatCounter {
+		t.Errorf("BMP statistics counter did not increment after 60 seconds. Initial: %v, Updated: %v", initialStatCounter, updatedStatCounter)
+	} else {
+		t.Log("BMP statistics counter incremented as expected.")
+	}
+}
+
+func verifyBMPPostPolicyRouteMonitoring(t *testing.T, ate *ondatra.ATEDevice, bmpName string) {
+	t.Helper()
+
+	otg := ate.OTG()
+	bmpServer := gnmi.OTG().BmpServer(bmpName)
+
+	fptest.LogQuery(t, "Route Monitoring Updates", bmpServer.State(), gnmi.Get(t, otg, bmpServer.State()))
+
+	prePolicyV4Routes := gnmi.Get(t, ate.OTG(), bmpServer.Counters().PrePolicyIpv4UnicastRoutesReceived().State())
+	_, ok := gnmi.Watch(t, otg, bmpServer.Counters().PrePolicyIpv4UnicastRoutesReceived().State(), timeout, func(val *ygnmi.Value[uint64]) bool {
+		receiveState, present := val.Val()
+		return present && receiveState == prePolicyV4RouteCount
+	}).Await(t)
+	if !ok {
+		t.Fatalf("PrePolicyIpv4UnicastRoutesReceived did not match route counter")
+	}
+	t.Logf("PrePolicyRoutes: %v", prePolicyV4Routes)
+
+	prePolicyV6Routes := gnmi.Get(t, ate.OTG(), bmpServer.Counters().PrePolicyIpv6UnicastRoutesReceived().State())
+	_, ok = gnmi.Watch(t, otg, bmpServer.Counters().PrePolicyIpv6UnicastRoutesReceived().State(), timeout, func(val *ygnmi.Value[uint64]) bool {
+		receiveState, present := val.Val()
+		return present && receiveState == prePolicyV6RouteCount
+	}).Await(t)
+	if !ok {
+		t.Fatalf("PrePolicyIpv6UnicastRoutesReceived did not match route counter")
+	}
+	t.Logf("PrePolicyRoutes: %v", prePolicyV6Routes)
+
+	postPolicyV4Routes := gnmi.Get(t, ate.OTG(), bmpServer.Counters().PostPolicyIpv4UnicastRoutesReceived().State())
+	_, ok = gnmi.Watch(t, otg, bmpServer.Counters().PostPolicyIpv4UnicastRoutesReceived().State(), timeout, func(val *ygnmi.Value[uint64]) bool {
+		receiveState, present := val.Val()
+		return present && receiveState == postPolicyV4RouteCount
+	}).Await(t)
+	if !ok {
+		t.Fatalf("PostPolicyIpv4UnicastRoutesReceived did not match route counter")
+	}
+	t.Logf("PrePolicyRoutes: %v", postPolicyV4Routes)
+
+	postPolicyV6Routes := gnmi.Get(t, ate.OTG(), bmpServer.Counters().PostPolicyIpv6UnicastRoutesReceived().State())
+	_, ok = gnmi.Watch(t, otg, bmpServer.Counters().PostPolicyIpv6UnicastRoutesReceived().State(), timeout, func(val *ygnmi.Value[uint64]) bool {
+		receiveState, present := val.Val()
+		return present && receiveState == postPolicyV6RouteCount
+	}).Await(t)
+	if !ok {
+		t.Fatalf("PostPolicyIpv6UnicastRoutesReceived did not match route counter")
+	}
+	t.Logf("PrePolicyRoutes: %v", postPolicyV6Routes)
 }
 
 func TestBMPBaseSession(t *testing.T) {
@@ -310,6 +451,14 @@ func TestBMPBaseSession(t *testing.T) {
 			fn: func(t *testing.T) {
 				t.Log("Verify BMP session on DUT")
 				verifyBMPStatisticsReporting(t, ate, bmpName)
+			},
+		},
+		{
+			name: "1.1.3_Verify_Route_Monitoring_Post_Policy",
+			fn: func(t *testing.T) {
+				t.Log("Verify Route Monitoring Post Policy on DUT")
+
+				verifyBMPPostPolicyRouteMonitoring(t, ate, bmpName)
 			},
 		},
 	}
