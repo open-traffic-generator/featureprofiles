@@ -28,10 +28,10 @@ const (
 	prefix1v4Subnet        = 32
 	prefix2v4              = "172.16.0.0"
 	prefix2v4Subnet        = 32
-	prefix1v6              = "2001:DB8:1::"
+	prefix1v6              = "2002:DB8:1::"
 	prefix1v6Subnet        = 48
 	prefix2v6              = "2001:DB8::"
-	prefix2v6Subnet        = 32
+	prefix2v6Subnet        = 48
 	routeCountV4           = 500
 	routeCountV6           = 500
 	bmpName                = "atebmp"
@@ -45,7 +45,7 @@ const (
 	prePolicyV4RouteCount  = 1000
 	prePolicyV6RouteCount  = 1000
 	postPolicyV4RouteCount = 500
-	postPolicyV6RouteCount = 499
+	postPolicyV6RouteCount = 500
 	timeout                = 60 * time.Second
 )
 
