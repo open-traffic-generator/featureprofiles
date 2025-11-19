@@ -178,6 +178,7 @@ type BGPNeighborConfig struct {
 	NeighborIPv6     string
 	IsLag            bool
 	MultiPathEnabled bool
+	PolicyName *string	
 }
 
 type BMPConfigParams struct {
@@ -724,8 +725,13 @@ func AppendBGPNeighbor(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.SetBatc
 	pgafv4 := pgv4.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST)
 	pgafv4.Enabled = ygot.Bool(true)
 	rpl4 := pgafv4.GetOrCreateApplyPolicy()
-	rpl4.ImportPolicy = []string{ALLOW}
-	rpl4.ExportPolicy = []string{ALLOW}
+	if cfg.PolicyName != nil {
+		rpl4.ImportPolicy = []string{*cfg.PolicyName}
+		rpl4.ExportPolicy = []string{*cfg.PolicyName}
+	} else {
+		rpl4.ImportPolicy = []string{ALLOW}
+		rpl4.ExportPolicy = []string{ALLOW}
+	}
 
 	// === Peer Group for IPv6 ===
 	pgv6Name := cfg.PortName + "BGP-PEER-GROUP-V6"
@@ -735,8 +741,13 @@ func AppendBGPNeighbor(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.SetBatc
 	pgafv6 := pgv6.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST)
 	pgafv6.Enabled = ygot.Bool(true)
 	rpl6 := pgafv6.GetOrCreateApplyPolicy()
-	rpl6.ImportPolicy = []string{ALLOW}
-	rpl6.ExportPolicy = []string{ALLOW}
+	if cfg.PolicyName != nil {
+		rpl6.ImportPolicy = []string{*cfg.PolicyName}
+		rpl6.ExportPolicy = []string{*cfg.PolicyName}
+	} else {
+		rpl6.ImportPolicy = []string{ALLOW}
+		rpl6.ExportPolicy = []string{ALLOW}
+	}
 
 	if cfg.MultiPathEnabled {
 		if deviations.MultipathUnsupportedNeighborOrAfisafi(dut) {

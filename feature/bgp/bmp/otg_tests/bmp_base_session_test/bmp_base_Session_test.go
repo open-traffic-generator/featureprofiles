@@ -27,13 +27,13 @@ const (
 	prefix1v4              = "192.168.0.0"
 	prefix1v4Subnet        = 24
 	prefix2v4              = "172.16.0.0"
-	prefix2v4Subnet        = 16
+	prefix2v4Subnet        = 24
 	prefix1v6              = "2001:DB8:1::"
 	prefix1v6Subnet        = 48
 	prefix2v6              = "2001:DB8::"
 	prefix2v6Subnet        = 32
-	routeCountV4           = 10
-	routeCountV6           = 10
+	routeCountV4           = 250
+	routeCountV6           = 250
 	bmpName                = "atebmp"
 	prefixSet              = "PREFIX-SET"
 	ipPrefixSet            = "172.16.0.0/16"
@@ -41,11 +41,11 @@ const (
 	prefixSetV6            = "PREFIX-SET-V6"
 	ipV6PrefixSet          = "2001:DB8::/32"
 	prefixV6SubnetRange    = "32..128"
-	policyName             = "ALLOW"
-	prePolicyV4RouteCount  = 20
-	prePolicyV6RouteCount  = 20
-	postPolicyV4RouteCount = 19
-	postPolicyV6RouteCount = 9
+	policyName             = "BMP-POLICY"
+	prePolicyV4RouteCount  = 500
+	prePolicyV6RouteCount  = 500
+	postPolicyV4RouteCount = 250
+	postPolicyV6RouteCount = 249
 	timeout                = 60 * time.Second
 )
 
@@ -127,6 +127,10 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) *gnmi.SetBatch {
 	return batch
 }
 
+func ptrToString(val string) *string {
+	return &val
+}
+
 // configureDUTBGPNeighbors appends multiple BGP neighbor configurations to an existing BGP protocol on the DUT. Instead of calling AppendBGPNeighbor repeatedly in the test, this helper iterates over a slice of BGPNeighborConfig and applies each neighbor configuration into the given gnmi.SetBatch.
 func configureDUTBGPNeighbors(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.SetBatch, bgp *oc.NetworkInstance_Protocol_Bgp) {
 	t.Helper()
@@ -138,6 +142,7 @@ func configureDUTBGPNeighbors(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.
 			NeighborIPv4: ateP1.IPv4,
 			NeighborIPv6: ateP1.IPv6,
 			IsLag:        false,
+			PolicyName: ptrToString(policyName),
 		},
 	}
 	for _, n := range neighbors {
