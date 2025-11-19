@@ -24,16 +24,16 @@ const (
 	plenIPv4               = 30
 	plenIPv6               = 126
 	bmpStationPort         = 7039
-	prefix1v4              = "192.168.0.0"
-	prefix1v4Subnet        = 24
+	prefix1v4              = "192.0.2.0"
+	prefix1v4Subnet        = 32
 	prefix2v4              = "172.16.0.0"
-	prefix2v4Subnet        = 24
+	prefix2v4Subnet        = 32
 	prefix1v6              = "2001:DB8:1::"
 	prefix1v6Subnet        = 48
 	prefix2v6              = "2001:DB8::"
 	prefix2v6Subnet        = 32
-	routeCountV4           = 250
-	routeCountV6           = 250
+	routeCountV4           = 500
+	routeCountV6           = 500
 	bmpName                = "atebmp"
 	prefixSet              = "PREFIX-SET"
 	ipPrefixSet            = "172.16.0.0/16"
@@ -42,18 +42,18 @@ const (
 	ipV6PrefixSet          = "2001:DB8::/32"
 	prefixV6SubnetRange    = "32..128"
 	policyName             = "BMP-POLICY"
-	prePolicyV4RouteCount  = 500
-	prePolicyV6RouteCount  = 500
-	postPolicyV4RouteCount = 250
-	postPolicyV6RouteCount = 249
+	prePolicyV4RouteCount  = 1000
+	prePolicyV6RouteCount  = 1000
+	postPolicyV4RouteCount = 500
+	postPolicyV6RouteCount = 499
 	timeout                = 60 * time.Second
 )
 
 var (
 	dutP1 = attrs.Attributes{
 		Desc:    "DUT to ATE Port 1",
-		IPv4:    "192.0.2.1",
-		IPv6:    "2001:db8:2::1",
+		IPv4:    "193.0.2.1",
+		IPv6:    "2002:db8:2::1",
 		MAC:     "02:00:01:02:02:02",
 		IPv4Len: plenIPv4,
 		IPv6Len: plenIPv6,
@@ -61,8 +61,8 @@ var (
 
 	ateP1 = attrs.Attributes{
 		Name:    "atePort1",
-		IPv4:    "192.0.2.2",
-		IPv6:    "2001:db8:2::2",
+		IPv4:    "193.0.2.2",
+		IPv6:    "2002:db8:2::2",
 		MAC:     "02:00:01:01:01:01",
 		IPv4Len: plenIPv4,
 		IPv6Len: plenIPv6,
@@ -70,8 +70,8 @@ var (
 
 	dutP2 = attrs.Attributes{
 		Desc:    "DUT to ATE Port 2",
-		IPv4:    "192.0.3.1",
-		IPv6:    "2001:db8:3::1",
+		IPv4:    "193.0.3.1",
+		IPv6:    "2002:db8:3::1",
 		MAC:     "02:00:02:02:02:02",
 		IPv4Len: plenIPv4,
 		IPv6Len: plenIPv6,
@@ -79,8 +79,8 @@ var (
 
 	ateP2 = attrs.Attributes{
 		Name:    "atePort2",
-		IPv4:    "192.0.3.2",
-		IPv6:    "2001:db8:3::2",
+		IPv4:    "193.0.3.2",
+		IPv6:    "2002:db8:3::2",
 		MAC:     "02:00:02:01:01:01",
 		IPv4Len: plenIPv4,
 		IPv6Len: plenIPv6,
