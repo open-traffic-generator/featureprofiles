@@ -143,6 +143,7 @@ func configureDUTBGPNeighbors(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.
 			NeighborIPv6: ateP1.IPv6,
 			IsLag:        false,
 			PolicyName:   ptrToString(policyName),
+			MultiPathEnabled: false,
 		},
 	}
 	for _, n := range neighbors {
