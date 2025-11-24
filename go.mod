@@ -2,6 +2,10 @@ module github.com/openconfig/featureprofiles
 
 go 1.24.7
 
+replace github.com/open-traffic-generator/snappi/gosnappi => github.com/open-traffic-generator/snappi/gosnappi v1.41.1-0.20251107134615-d3f12a00347c
+
+replace github.com/openconfig/ondatra => github.com/open-traffic-generator/ondatra v0.0.0-20251124135933-0d74b6243fb0
+
 require (
 	cloud.google.com/go/pubsub v1.45.1
 	cloud.google.com/go/storage v1.49.0
@@ -22,6 +26,7 @@ require (
 	github.com/openconfig/gnmi v0.14.1
 	github.com/openconfig/gnoi v0.7.0
 	github.com/openconfig/gnoigo v0.0.0-20250918224707-fee0fe3eee56
+	github.com/openconfig/gnpsi v0.3.2
 	github.com/openconfig/gnsi v1.9.0
 	github.com/openconfig/gocloser v0.0.0-20250211195114-79e08bd41eef
 	github.com/openconfig/goyang v1.6.3
@@ -46,8 +51,8 @@ require (
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621
 	golang.org/x/text v0.29.0
 	google.golang.org/api v0.215.0
-	google.golang.org/grpc v1.75.1
-	google.golang.org/protobuf v1.36.9
+	google.golang.org/grpc v1.76.0
+	google.golang.org/protobuf v1.36.10
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/klog/v2 v2.130.1
@@ -93,7 +98,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.1 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
@@ -129,7 +134,6 @@ require (
 	github.com/open-traffic-generator/keng-operator v0.3.28 // indirect
 	github.com/openconfig/attestz v0.5.0 // indirect
 	github.com/openconfig/bootz v0.6.0 // indirect
-	github.com/openconfig/gnpsi v0.3.2 // indirect
 	github.com/openconfig/grpctunnel v0.1.0 // indirect
 	github.com/openconfig/lemming/operator v0.2.0 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
