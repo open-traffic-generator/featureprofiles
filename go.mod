@@ -4,7 +4,7 @@ go 1.24.7
 
 replace github.com/open-traffic-generator/snappi/gosnappi => github.com/open-traffic-generator/snappi/gosnappi v1.41.1-0.20251107134615-d3f12a00347c
 
-replace github.com/openconfig/ondatra => github.com/open-traffic-generator/ondatra v0.0.0-20251110103809-81ad66bb54d3
+replace github.com/openconfig/ondatra => github.com/open-traffic-generator/ondatra v0.0.0-20251124135933-0d74b6243fb0
 
 require (
 	cloud.google.com/go/pubsub v1.45.1
@@ -26,6 +26,7 @@ require (
 	github.com/openconfig/gnmi v0.14.1
 	github.com/openconfig/gnoi v0.7.0
 	github.com/openconfig/gnoigo v0.0.0-20250918224707-fee0fe3eee56
+	github.com/openconfig/gnpsi v0.3.2
 	github.com/openconfig/gnsi v1.9.0
 	github.com/openconfig/gocloser v0.0.0-20250211195114-79e08bd41eef
 	github.com/openconfig/goyang v1.6.3
@@ -133,7 +134,6 @@ require (
 	github.com/open-traffic-generator/keng-operator v0.3.28 // indirect
 	github.com/openconfig/attestz v0.5.0 // indirect
 	github.com/openconfig/bootz v0.6.0 // indirect
-	github.com/openconfig/gnpsi v0.3.2 // indirect
 	github.com/openconfig/grpctunnel v0.1.0 // indirect
 	github.com/openconfig/lemming/operator v0.2.0 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
