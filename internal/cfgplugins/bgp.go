@@ -182,13 +182,14 @@ type BGPNeighborConfig struct {
 	NeighborIPv6     string
 	IsLag            bool
 	MultiPathEnabled bool
+	PolicyName       *string
 }
 
 type BMPConfigParams struct {
 	DutAS        uint32
 	AteAS        uint32
 	BGPObj       *oc.NetworkInstance_Protocol_Bgp
-	Source string
+	Source       string
 	LocalAddr    string
 	StationAddr  string
 	StationPort  uint16
