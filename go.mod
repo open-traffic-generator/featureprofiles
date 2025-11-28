@@ -2,7 +2,7 @@ module github.com/openconfig/featureprofiles
 
 go 1.24.7
 
-replace github.com/open-traffic-generator/snappi/gosnappi => github.com/open-traffic-generator/snappi/gosnappi v1.41.1-0.20251107134615-d3f12a00347c
+replace github.com/open-traffic-generator/snappi/gosnappi => github.com/open-traffic-generator/snappi/gosnappi v1.41.1-0.20251117102858-c0e8e2643864
 
 replace github.com/openconfig/ondatra => github.com/open-traffic-generator/ondatra v0.0.0-20251124135933-0d74b6243fb0
 

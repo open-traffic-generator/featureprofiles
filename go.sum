@@ -295,8 +295,8 @@ github.com/open-traffic-generator/keng-operator v0.3.28 h1:FpDe1wtGODN7ByAhF2LxM
 github.com/open-traffic-generator/keng-operator v0.3.28/go.mod h1:+koaOnSyrJHdzxnaye+M6k+ZbszQlWI9u3tMxSpORNA=
 github.com/open-traffic-generator/ondatra v0.0.0-20251124135933-0d74b6243fb0 h1:+RywgBehIPcqZqFBC9isShWpzo43MrVXdnXdLBdSobI=
 github.com/open-traffic-generator/ondatra v0.0.0-20251124135933-0d74b6243fb0/go.mod h1:nwDBKm/soMSoFb6Z/U2YNYj0jbLBUwvA936AcoEEs5w=
-github.com/open-traffic-generator/snappi/gosnappi v1.41.1-0.20251107134615-d3f12a00347c h1:eQgVIuTJjPhqS7DyoGwqJh7R7fqlr8PytxXlOsNFS8s=
-github.com/open-traffic-generator/snappi/gosnappi v1.41.1-0.20251107134615-d3f12a00347c/go.mod h1:GJZ9fZcD2zA9+6DHoMUT6+XrEHu9zied5xtJeNcvSiw=
+github.com/open-traffic-generator/snappi/gosnappi v1.41.1-0.20251117102858-c0e8e2643864 h1:zYykyRR67rO8WcifwxNrhR39aoiXmHVw75wTWl1E/yY=
+github.com/open-traffic-generator/snappi/gosnappi v1.41.1-0.20251117102858-c0e8e2643864/go.mod h1:YLr6kzoy7ryuoM3ZFaPZmfAvyx6O7o0LYvLieczgiA0=
 github.com/openconfig/attestz v0.5.0 h1:1XDcw8CaAxS9+Yrrmj69qChwa2Y5q/TlcU9h4up3Qrc=
 github.com/openconfig/attestz v0.5.0/go.mod h1:b4sZBEyj054i4TKG1iB/ZQXMvz/15KDSDmhGVANYD9g=
 github.com/openconfig/bootz v0.6.0 h1:QAbYVKKYqoJfO7Vzmv4PTBTcPe1PWRrSz0vgALvnYdk=

@@ -25,29 +25,34 @@ const (
 	plenIPv6               = 126
 	bmpStationPort         = 7039
 	prefix1v4              = "192.0.2.0"
-	prefix1v4Subnet        = 32
+	prefix1v4Subnet        = 24
 	prefix2v4              = "172.16.0.0"
-	prefix2v4Subnet        = 32
-	prefix1v6              = "2002:DB8:1::"
+	prefix2v4Subnet        = 16
+	prefix1v6              = "2002:db8:1::"
 	prefix1v6Subnet        = 48
-	prefix2v6              = "2001:DB8::"
+	prefix2v6              = "2001:db8::"
 	prefix2v6Subnet        = 48
-	routeCountV4           = 500
-	routeCountV6           = 500
+	routeCountV4           = 5000
+	routeCountV6           = 5000
 	bmpName                = "atebmp"
 	prefixSet              = "PREFIX-SET"
 	ipPrefixSet            = "172.16.0.0/16"
 	prefixSubnetRange      = "16..32"
 	prefixSetV6            = "PREFIX-SET-V6"
-	ipV6PrefixSet          = "2001:DB8::/32"
+	ipV6PrefixSet          = "2001:db8::/32"
 	prefixV6SubnetRange    = "32..128"
 	policyName             = "BMP-POLICY"
-	prePolicyV4RouteCount  = 1000
-	prePolicyV6RouteCount  = 1000
-	postPolicyV4RouteCount = 500
-	postPolicyV6RouteCount = 500
+	prePolicyV4RouteCount  = 10000
+	prePolicyV6RouteCount  = 10000
+	postPolicyV4RouteCount = 9999
+	postPolicyV6RouteCount = 5000
 	timeout                = 60 * time.Second
 )
+
+type PolicyRoute struct {
+	Address      string
+	PrefixLength int
+}
 
 var (
 	dutP1 = attrs.Attributes{
@@ -84,6 +89,42 @@ var (
 		MAC:     "02:00:02:01:01:01",
 		IPv4Len: plenIPv4,
 		IPv6Len: plenIPv6,
+	}
+
+	postPolicyRoutes = []PolicyRoute{
+		{
+			Address: prefix1v4,
+			PrefixLength: prefix1v4Subnet,
+		},
+	}
+
+	prePolicyRoutes = []PolicyRoute{
+		{
+			Address:      prefix1v4,
+			PrefixLength: prefix1v4Subnet,
+		},
+		{
+			Address:      prefix2v4,
+			PrefixLength: prefix2v4Subnet,
+		},
+	}
+
+	postPolicyRoutesV6 = []PolicyRoute{
+		{
+			Address: prefix1v6,
+			PrefixLength: prefix1v6Subnet,
+		},
+	}
+
+	prePolicyRoutesV6 = []PolicyRoute{
+		{
+			Address:      prefix1v6,
+			PrefixLength: prefix1v6Subnet,
+		},
+		{
+			Address:      prefix2v6,
+			PrefixLength: prefix2v6Subnet,
+		},
 	}
 )
 
@@ -137,12 +178,12 @@ func configureDUTBGPNeighbors(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.
 	// Add BGP neighbors
 	neighbors := []cfgplugins.BGPNeighborConfig{
 		{
-			AteAS:        ate1AS,
-			PortName:     dutP1.Name,
-			NeighborIPv4: ateP1.IPv4,
-			NeighborIPv6: ateP1.IPv6,
-			IsLag:        false,
-			PolicyName:   ptrToString(policyName),
+			AteAS:            ate1AS,
+			PortName:         dutP1.Name,
+			NeighborIPv4:     ateP1.IPv4,
+			NeighborIPv6:     ateP1.IPv6,
+			IsLag:            false,
+			PolicyName:       ptrToString(policyName),
 			MultiPathEnabled: false,
 		},
 	}
@@ -319,6 +360,22 @@ func configureBMPOnATEDevice(t *testing.T, cfg gosnappi.Config, params ateConfig
 	bmpServer.SetClientIp(params.dutPortAttrs.IPv4)                // Connected reachable DUT IP
 	bmpServer.Connection().Passive().SetListenPort(bmpStationPort) // BMP port configured on DUT
 
+	discard := bmpServer.PrefixStorage().Ipv4Unicast().Discard()
+	discard.Exceptions().Add().
+		SetIpv4Prefix(prefix1v4).
+		SetPrefixLength(prefix1v4Subnet)
+	discard.Exceptions().Add().
+		SetIpv4Prefix(prefix2v4).
+		SetPrefixLength(prefix2v4Subnet)
+
+	discardv6 := bmpServer.PrefixStorage().Ipv6Unicast().Discard()
+	discardv6.Exceptions().Add().
+		SetIpv6Prefix(prefix1v6).
+		SetPrefixLength(prefix1v6Subnet)
+	discardv6.Exceptions().Add().
+		SetIpv6Prefix(prefix2v6).
+		SetPrefixLength(prefix2v6Subnet)
+
 }
 
 // addBGPRoutes adds BGP route advertisements to an ATE device.
@@ -347,7 +404,6 @@ func verifyBMPSessionOnATE(t *testing.T, ate *ondatra.ATEDevice, bmpName string)
 		fptest.LogQuery(t, "ATE BMP session state", bmpServer.State(), gnmi.Get(t, otg, bmpServer.State()))
 		t.Fatalf("BMP Session state is not UP")
 	}
-	fptest.LogQuery(t, "ATE BMP session state", bmpServer.State(), gnmi.Get(t, otg, bmpServer.State()))
 	t.Log("BMP session is UP")
 }
 
@@ -421,6 +477,77 @@ func verifyBMPPostPolicyRouteMonitoring(t *testing.T, ate *ondatra.ATEDevice, bm
 	t.Logf("PrePolicyRoutes: %v", postPolicyV6Routes)
 }
 
+func verifyBMPPostPolicyRouteMonitoringPerPrefix(t *testing.T, ate *ondatra.ATEDevice, bmpName string) {
+	t.Helper()
+
+	path := gnmi.OTG().BmpServer(bmpName).PeerStateDatabase().PeerAny()
+
+	for _, postPolicyRoute := range postPolicyRoutes {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().UnicastIpv4Prefix(postPolicyRoute.Address, uint32(postPolicyRoute.PrefixLength), 1, 0).State(), 2 * time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_UnicastIpv4Prefix]) bool {
+			prefix, present := v.Val()
+			return present && prefix.GetAddress() == postPolicyRoute.Address
+		}).Await(t)
+		if !ok {
+			t.Errorf("postPolicyRoute %s not found in PostPolicyRib", postPolicyRoute.Address)
+		}
+	}
+
+	for _, prePolicyRoute := range prePolicyRoutes {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PrePolicyInRib().UnicastIpv4Prefix(prePolicyRoute.Address, uint32(prePolicyRoute.PrefixLength), 1, 0).State(), 2 * time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PrePolicyInRib_UnicastIpv4Prefix]) bool {
+			prefix, present := v.Val()
+			return present && prefix.GetAddress() == prePolicyRoute.Address
+		}).Await(t)
+		if !ok {
+			t.Errorf("prePolicyRoute %s not found in PrePolicyRib", prePolicyRoute.Address)
+		}
+	}
+
+	for _, postPolicyRoutev6 := range postPolicyRoutesV6 {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().UnicastIpv6Prefix(postPolicyRoutev6.Address, uint32(postPolicyRoutev6.PrefixLength), 1, 0).State(), 2 * time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_UnicastIpv6Prefix]) bool {
+			prefix, present := v.Val()
+			return present && prefix.GetAddress() == postPolicyRoutev6.Address
+		}).Await(t)
+		if !ok {
+			t.Errorf("postPolicyRouteV6 %s not found in PostPolicyRib", postPolicyRoutev6.Address)
+		}
+	}
+
+	for _, prePolicyRoutev6 := range prePolicyRoutesV6 {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PrePolicyInRib().UnicastIpv6Prefix(prePolicyRoutev6.Address, uint32(prePolicyRoutev6.PrefixLength), 1, 0).State(), 2 * time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PrePolicyInRib_UnicastIpv6Prefix]) bool {
+			prefix, present := v.Val()
+			return present && prefix.GetAddress() == prePolicyRoutev6.Address
+		}).Await(t)
+		if !ok {
+			t.Errorf("prePolicyRouteV6 %s not found in PrePolicyRib", prePolicyRoutev6.Address)
+		}
+	}
+}
+
+func verifyPrefixCountV4(t *testing.T, dut *ondatra.DUTDevice) {
+	compare := func(val *ygnmi.Value[uint32]) bool {
+		c, ok := val.Val()
+		return ok && c == postPolicyV4RouteCount
+	}
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	prefixes := statePath.Neighbor(ateP1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).Prefixes()
+	if got, ok := gnmi.Watch(t, dut, prefixes.Received().State(), 2*time.Minute, compare).Await(t); !ok {
+		t.Errorf("Received prefixes v4 mismatch: got %v, want %v", got, postPolicyV4RouteCount)
+	}
+}
+
+func verifyPrefixCountV6(t *testing.T, dut *ondatra.DUTDevice) {
+	compare := func(val *ygnmi.Value[uint32]) bool {
+		c, ok := val.Val()
+		return ok && c == postPolicyV6RouteCount
+	}
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	prefixes := statePath.Neighbor(ateP1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).Prefixes()
+
+	if got, ok := gnmi.Watch(t, dut, prefixes.Received().State(), 2*time.Minute, compare).Await(t); !ok {
+		t.Errorf("Received prefixes v6 mismatch: got %v, want %v", got, postPolicyV6RouteCount)
+	}
+}
+
 func TestBMPBaseSession(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
 	ate := ondatra.ATE(t, "ate")
@@ -437,6 +564,9 @@ func TestBMPBaseSession(t *testing.T) {
 
 	t.Log("Verify OTG BGP sessions up")
 	cfgplugins.VerifyOTGBGPEstablished(t, ate)
+
+	verifyPrefixCountV4(t, dut)
+	verifyPrefixCountV6(t, dut)
 
 	type testCase struct {
 		name string
@@ -465,6 +595,7 @@ func TestBMPBaseSession(t *testing.T) {
 
 				t.Log("Verify Route Monitoring Post Policy on DUT")
 				verifyBMPPostPolicyRouteMonitoring(t, ate, bmpName)
+				verifyBMPPostPolicyRouteMonitoringPerPrefix(t, ate, bmpName)
 			},
 		},
 	}
