@@ -1608,6 +1608,8 @@ func ConfigureBMP(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.SetBatch, cf
 		// TODO: change the below constants
 		BMPRouteConfig := fmt.Sprintf(`
 		router bgp %[1]d
+		neighbor BGP-PEER-GROUP-V4 maximum-routes 0
+		neighbor BGP-PEER-GROUP-V6 maximum-routes 0
 		bgp monitoring
 		! BMP station
 		monitoring station BMP_STN1
