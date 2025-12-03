@@ -197,7 +197,7 @@ func configureDUTBGPNeighbors(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.
 	}
 	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().Config(), rpl)
 
-	pol := applyBgpPolicy(policyName, dut, true)
+	pol := applyBgpPolicy(policyName, dut)
 
 	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
 
@@ -241,30 +241,27 @@ func configureBGPPolicy() (*oc.RoutingPolicy, error) {
 
 }
 
-func applyBgpPolicy(policyName string, dut *ondatra.DUTDevice, isV4 bool) *oc.NetworkInstance_Protocol {
+func applyBgpPolicy(policyName string, dut *ondatra.DUTDevice) *oc.NetworkInstance_Protocol {
 	d := &oc.Root{}
 	ni1 := d.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
 	niProto := ni1.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
 	bgp := niProto.GetOrCreateBgp()
 
-	pg := bgp.GetOrCreatePeerGroup("BGP-PEER-GROUP-V4")
-	pg.PeerGroupName = ygot.String("BGP-PEER-GROUP-V4")
+	pgv4 := bgp.GetOrCreatePeerGroup("BGP-PEER-GROUP-V4")
+	pgv4.PeerGroupName = ygot.String("BGP-PEER-GROUP-V4")
+	pgv6 := bgp.GetOrCreatePeerGroup("BGP-PEER-GROUP-V6")
+	pgv6.PeerGroupName = ygot.String("BGP-PEER-GROUP-V6")
 
-	if deviations.RoutePolicyUnderAFIUnsupported(dut) {
-		// policy under peer group
-		pg.GetOrCreateApplyPolicy().ImportPolicy = []string{policyName}
-		return niProto
-	}
-
-	aftType := oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST
-	if isV4 {
-		aftType = oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST
-	}
-
-	afisafi := pg.GetOrCreateAfiSafi(aftType)
-	afisafi.Enabled = ygot.Bool(true)
-	rpl := afisafi.GetOrCreateApplyPolicy()
-	rpl.SetImportPolicy([]string{policyName})
+	pg1af4 := pgv4.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST)
+	pg1af4.Enabled = ygot.Bool(true)
+	pg1rpl4 := pg1af4.GetOrCreateApplyPolicy()
+	pg1rpl4.SetExportPolicy([]string{policyName})
+	pg1rpl4.SetImportPolicy([]string{policyName})
+	pg1af6 := pgv6.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST)
+	pg1af6.Enabled = ygot.Bool(true)
+	pg1rpl6 := pg1af6.GetOrCreateApplyPolicy()
+	pg1rpl6.SetExportPolicy([]string{policyName})
+	pg1rpl6.SetImportPolicy([]string{policyName})
 
 	return niProto
 }
