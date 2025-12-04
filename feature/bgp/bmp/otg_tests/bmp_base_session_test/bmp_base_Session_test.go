@@ -93,8 +93,15 @@ var (
 
 	postPolicyRoutes = []PolicyRoute{
 		{
-			Address: prefix1v4,
+			Address:      prefix1v4,
 			PrefixLength: prefix1v4Subnet,
+		},
+	}
+
+	postPolicyRoutesDenied = []PolicyRoute{
+		{
+			Address:      prefix2v4,
+			PrefixLength: prefix2v4Subnet,
 		},
 	}
 
@@ -111,8 +118,15 @@ var (
 
 	postPolicyRoutesV6 = []PolicyRoute{
 		{
-			Address: prefix1v6,
+			Address:      prefix1v6,
 			PrefixLength: prefix1v6Subnet,
+		},
+	}
+
+	postPolicyRoutesV6Denied = []PolicyRoute{
+		{
+			Address:      prefix2v6,
+			PrefixLength: prefix2v6Subnet,
 		},
 	}
 
@@ -197,11 +211,6 @@ func configureDUTBGPNeighbors(t *testing.T, dut *ondatra.DUTDevice, batch *gnmi.
 	}
 	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().Config(), rpl)
 
-	pol := applyBgpPolicy(policyName, dut)
-
-	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
-
-	gnmi.Update(t, dut, dutConfPath.Config(), pol)
 }
 
 func configureBGPPolicy() (*oc.RoutingPolicy, error) {
@@ -239,31 +248,6 @@ func configureBGPPolicy() (*oc.RoutingPolicy, error) {
 
 	return rp, nil
 
-}
-
-func applyBgpPolicy(policyName string, dut *ondatra.DUTDevice) *oc.NetworkInstance_Protocol {
-	d := &oc.Root{}
-	ni1 := d.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-	niProto := ni1.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
-	bgp := niProto.GetOrCreateBgp()
-
-	pgv4 := bgp.GetOrCreatePeerGroup("BGP-PEER-GROUP-V4")
-	pgv4.PeerGroupName = ygot.String("BGP-PEER-GROUP-V4")
-	pgv6 := bgp.GetOrCreatePeerGroup("BGP-PEER-GROUP-V6")
-	pgv6.PeerGroupName = ygot.String("BGP-PEER-GROUP-V6")
-
-	pg1af4 := pgv4.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST)
-	pg1af4.Enabled = ygot.Bool(true)
-	pg1rpl4 := pg1af4.GetOrCreateApplyPolicy()
-	pg1rpl4.SetExportPolicy([]string{policyName})
-	pg1rpl4.SetImportPolicy([]string{policyName})
-	pg1af6 := pgv6.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST)
-	pg1af6.Enabled = ygot.Bool(true)
-	pg1rpl6 := pg1af6.GetOrCreateApplyPolicy()
-	pg1rpl6.SetExportPolicy([]string{policyName})
-	pg1rpl6.SetImportPolicy([]string{policyName})
-
-	return niProto
 }
 
 // configureATE builds and returns the OTG configuration for the ATE topology.
@@ -480,7 +464,7 @@ func verifyBMPPostPolicyRouteMonitoringPerPrefix(t *testing.T, ate *ondatra.ATED
 	path := gnmi.OTG().BmpServer(bmpName).PeerStateDatabase().PeerAny()
 
 	for _, postPolicyRoute := range postPolicyRoutes {
-		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv4Prefix(postPolicyRoute.Address, uint32(postPolicyRoute.PrefixLength), 1, 0).State(), 2 * time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv4Prefix]) bool {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv4Prefix(postPolicyRoute.Address, uint32(postPolicyRoute.PrefixLength), 1, 0).State(), 2*time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv4Prefix]) bool {
 			prefix, present := v.Val()
 			return present && prefix.GetAddress() == postPolicyRoute.Address
 		}).Await(t)
@@ -489,8 +473,18 @@ func verifyBMPPostPolicyRouteMonitoringPerPrefix(t *testing.T, ate *ondatra.ATED
 		}
 	}
 
+	for _, postPolicyRoutedenied := range postPolicyRoutesDenied {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv4Prefix(postPolicyRoutedenied.Address, uint32(postPolicyRoutedenied.PrefixLength), 1, 0).State(), 2*time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv4Prefix]) bool {
+			prefix, present := v.Val()
+			return present && prefix.GetAddress() == postPolicyRoutedenied.Address
+		}).Await(t)
+		if ok {
+			t.Errorf("postPolicyDiscardRoute %s found in PostPolicyRib", postPolicyRoutedenied.Address)
+		}
+	}
+
 	for _, prePolicyRoute := range prePolicyRoutes {
-		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PrePolicyInRib().BmpUnicastIpv4Prefix(prePolicyRoute.Address, uint32(prePolicyRoute.PrefixLength), 1, 0).State(), 2 * time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PrePolicyInRib_BmpUnicastIpv4Prefix]) bool {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PrePolicyInRib().BmpUnicastIpv4Prefix(prePolicyRoute.Address, uint32(prePolicyRoute.PrefixLength), 1, 0).State(), 2*time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PrePolicyInRib_BmpUnicastIpv4Prefix]) bool {
 			prefix, present := v.Val()
 			return present && prefix.GetAddress() == prePolicyRoute.Address
 		}).Await(t)
@@ -500,7 +494,7 @@ func verifyBMPPostPolicyRouteMonitoringPerPrefix(t *testing.T, ate *ondatra.ATED
 	}
 
 	for _, postPolicyRoutev6 := range postPolicyRoutesV6 {
-		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv6Prefix(postPolicyRoutev6.Address, uint32(postPolicyRoutev6.PrefixLength), 1, 0).State(), 2 * time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv6Prefix]) bool {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv6Prefix(postPolicyRoutev6.Address, uint32(postPolicyRoutev6.PrefixLength), 1, 0).State(), 2*time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv6Prefix]) bool {
 			prefix, present := v.Val()
 			return present && prefix.GetAddress() == postPolicyRoutev6.Address
 		}).Await(t)
@@ -509,8 +503,18 @@ func verifyBMPPostPolicyRouteMonitoringPerPrefix(t *testing.T, ate *ondatra.ATED
 		}
 	}
 
+	for _, postPolicyRouteV6Denied := range postPolicyRoutesV6Denied {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv4Prefix(postPolicyRouteV6Denied.Address, uint32(postPolicyRouteV6Denied.PrefixLength), 1, 0).State(), 2*time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv4Prefix]) bool {
+			prefix, present := v.Val()
+			return present && prefix.GetAddress() == postPolicyRouteV6Denied.Address
+		}).Await(t)
+		if ok {
+			t.Errorf("postPolicyDiscardRoute %s found in PostPolicyRib", postPolicyRouteV6Denied.Address)
+		}
+	}
+
 	for _, prePolicyRoutev6 := range prePolicyRoutesV6 {
-		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PrePolicyInRib().BmpUnicastIpv6Prefix(prePolicyRoutev6.Address, uint32(prePolicyRoutev6.PrefixLength), 1, 0).State(), 2 * time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PrePolicyInRib_BmpUnicastIpv6Prefix]) bool {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PrePolicyInRib().BmpUnicastIpv6Prefix(prePolicyRoutev6.Address, uint32(prePolicyRoutev6.PrefixLength), 1, 0).State(), 2*time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PrePolicyInRib_BmpUnicastIpv6Prefix]) bool {
 			prefix, present := v.Val()
 			return present && prefix.GetAddress() == prePolicyRoutev6.Address
 		}).Await(t)
