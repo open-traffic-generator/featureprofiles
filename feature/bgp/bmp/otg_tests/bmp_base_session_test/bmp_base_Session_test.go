@@ -474,7 +474,7 @@ func verifyBMPPostPolicyRouteMonitoringPerPrefix(t *testing.T, ate *ondatra.ATED
 	}
 
 	for _, postPolicyRoutedenied := range postPolicyRoutesDenied {
-		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv4Prefix(postPolicyRoutedenied.Address, uint32(postPolicyRoutedenied.PrefixLength), 1, 0).State(), 2*time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv4Prefix]) bool {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv4Prefix(postPolicyRoutedenied.Address, uint32(postPolicyRoutedenied.PrefixLength), 1, 0).State(), 10* time.Second, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv4Prefix]) bool {
 			prefix, present := v.Val()
 			return present && prefix.GetAddress() == postPolicyRoutedenied.Address
 		}).Await(t)
@@ -504,7 +504,7 @@ func verifyBMPPostPolicyRouteMonitoringPerPrefix(t *testing.T, ate *ondatra.ATED
 	}
 
 	for _, postPolicyRouteV6Denied := range postPolicyRoutesV6Denied {
-		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv4Prefix(postPolicyRouteV6Denied.Address, uint32(postPolicyRouteV6Denied.PrefixLength), 1, 0).State(), 2*time.Minute, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv4Prefix]) bool {
+		_, ok := gnmi.WatchAll(t, ate.OTG(), path.PostPolicyInRib().BmpUnicastIpv4Prefix(postPolicyRouteV6Denied.Address, uint32(postPolicyRouteV6Denied.PrefixLength), 1, 0).State(), 10*time.Second, func(v *ygnmi.Value[*otgtelemetry.BmpServer_PeerStateDatabase_Peer_PostPolicyInRib_BmpUnicastIpv4Prefix]) bool {
 			prefix, present := v.Val()
 			return present && prefix.GetAddress() == postPolicyRouteV6Denied.Address
 		}).Await(t)
