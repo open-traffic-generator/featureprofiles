@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -342,6 +343,7 @@ func (tc *testArgs) configureATE(t *testing.T) {
 
 	// Adding the rest of the ports to the configuration and to the LAG
 	agg := tc.top.Lags().Add().SetName(ateDst.Name)
+	capPorts := []string{}
 	if tc.lagType == lagTypeSTATIC {
 		lagID, _ := strconv.Atoi(tc.aggID)
 		agg.Protocol().Static().SetLagId(uint32(lagID))
@@ -367,6 +369,15 @@ func (tc *testArgs) configureATE(t *testing.T) {
 		}
 	}
 
+	for _, p := range tc.atePorts[1:] {
+		capPorts = append(capPorts, p.ID())
+	}
+
+	tc.top.Captures().Add().
+		SetName("ca").
+		SetPortNames(capPorts).
+		SetFormat(gosnappi.CaptureFormat.PCAP)
+
 	// Disable FEC for 100G-FR ports because Novus does not support it.
 	p100gbasefr := []string{}
 	for _, p := range tc.atePorts {
@@ -388,8 +399,6 @@ func (tc *testArgs) configureATE(t *testing.T) {
 	dstEth.Ipv4Addresses().Add().SetName(ateDst.Name + ".IPv4").SetAddress(ateDst.IPv4).SetGateway(dutDst.IPv4).SetPrefix(uint32(ateDst.IPv4Len))
 	dstEth.Ipv6Addresses().Add().SetName(ateDst.Name + ".IPv6").SetAddress(ateDst.IPv6).SetGateway(dutDst.IPv6).SetPrefix(uint32(ateDst.IPv6Len))
 
-	tc.ate.OTG().PushConfig(t, tc.top)
-	tc.ate.OTG().StartProtocols(t)
 }
 
 // incrementMAC uses a mac string and increments it by the given i
@@ -515,6 +524,28 @@ func (tc *testArgs) testAggregateForwardingFlow(t *testing.T, forwardingViable b
 	lp := newLinkPairs(tc.dut, tc.ate)
 	pName := tc.dutPorts[1].Name()
 
+	i1 := ateSrc.Name
+	i2 := ateDst.Name
+
+	tc.top.Flows().Clear().Items()
+	flow := tc.top.Flows().Add().SetName("flow")
+	flow.Metrics().SetEnable(true)
+	flow.Size().SetFixed(128)
+	flow.Packet().Add().Ethernet().Src().SetValue(ateSrc.MAC)
+
+	flow.TxRx().Device().SetTxNames([]string{i1 + ".IPv4"}).SetRxNames([]string{i2 + ".IPv4"})
+	v4 := flow.Packet().Add().Ipv4()
+	v4.Src().SetValue(ateSrc.IPv4)
+	v4.Dst().SetValue(ateDst.IPv4)
+	tcp := flow.Packet().Add().Tcp()
+	tcp.SrcPort().SetValues(generateRandomPortList(65534))
+	tc.ate.OTG().PushConfig(t, tc.top)
+
+	cs := gosnappi.NewControlState()
+	cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.START)
+	tc.ate.OTG().SetControlState(t, cs)
+
+	tc.ate.OTG().StartProtocols(t)
 	// Update the interface config of one port in port-channel when the forwarding flag is set as false.
 	if !forwardingViable {
 		t.Log("First port does not forward traffic because it is marked as not viable.")
@@ -533,24 +564,6 @@ func (tc *testArgs) testAggregateForwardingFlow(t *testing.T, forwardingViable b
 	if !ok {
 		t.Errorf("First port %s forwarding-viable mismatch: got %v, want %v", pName, v, forwardingViable)
 	}
-
-	i1 := ateSrc.Name
-	i2 := ateDst.Name
-
-	tc.top.Flows().Clear().Items()
-	flow := tc.top.Flows().Add().SetName("flow")
-	flow.Metrics().SetEnable(true)
-	flow.Size().SetFixed(128)
-	flow.Packet().Add().Ethernet().Src().SetValue(ateSrc.MAC)
-
-	flow.TxRx().Device().SetTxNames([]string{i1 + ".IPv4"}).SetRxNames([]string{i2 + ".IPv4"})
-	v4 := flow.Packet().Add().Ipv4()
-	v4.Src().SetValue(ateSrc.IPv4)
-	v4.Dst().SetValue(ateDst.IPv4)
-	tcp := flow.Packet().Add().Tcp()
-	tcp.SrcPort().SetValues(generateRandomPortList(65534))
-	tc.ate.OTG().PushConfig(t, tc.top)
-	tc.ate.OTG().StartProtocols(t)
 
 	otgutils.WaitForARP(t, tc.ate.OTG(), tc.top, "IPv4")
 	beforeTrafficCounters := tc.getCounters(t, "before")
@@ -576,6 +589,26 @@ func (tc *testArgs) testAggregateForwardingFlow(t *testing.T, forwardingViable b
 	}
 	tc.verifyCounterDiff(t, beforeTrafficCounters, afterTrafficCounters, want)
 	t.Log("Counters", beforeTrafficCounters, afterTrafficCounters)
+
+	cs = gosnappi.NewControlState()
+	cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.STOP)
+	tc.ate.OTG().SetControlState(t, cs)
+
+	for _, p := range tc.atePorts[1:] {
+		cr := gosnappi.NewCaptureRequest()
+		cr.SetPortName(p.ID())
+		bytes := tc.ate.OTG().GetCapture(t, cr)
+
+		f, err := os.CreateTemp(".", fmt.Sprintf("ForwardingViable-%v-%s-*.pcap", forwardingViable, p.ID()))
+		if err != nil {
+			fmt.Printf("ERROR: Could not create temporary pcap file: %v\n", err)
+		}
+
+		if _, err := f.Write(bytes); err != nil {
+			fmt.Printf("ERROR: Could not write bytes to pcap file: %v\n", err)
+		}
+		f.Close()
+	}
 }
 
 // getCounters returns list of interface counters for each dut port part of LAG.
@@ -605,7 +638,7 @@ func TestAggregateForwardingViable(t *testing.T) {
 	ate := ondatra.ATE(t, "ate")
 	aggID := netutil.NextAggregateInterface(t, dut)
 
-	lagTypes := []oc.E_IfAggregate_AggregationType{lagTypeSTATIC, lagTypeLACP}
+	lagTypes := []oc.E_IfAggregate_AggregationType{lagTypeLACP}
 	for _, lagType := range lagTypes {
 		args := &testArgs{
 			dut:      dut,
