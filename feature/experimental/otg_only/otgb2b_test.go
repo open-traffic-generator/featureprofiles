@@ -3,6 +3,10 @@ package otg_b2b
 import (
 	//"os"
 
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,10 +47,10 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	config := gosnappi.NewConfig()
 	srcPort := config.Ports().Add().SetName("port1")
 	dstPort := config.Ports().Add().SetName("port2")
-	// config.Captures().Add().
-	// 	SetName("otg_cap").
-	// 	SetPortNames([]string{dstPort.Name()}).
-	// 	SetFormat(gosnappi.CaptureFormat.PCAP).SetOverwrite(true)
+	config.Captures().Add().
+		SetName("otg_cap").
+		SetPortNames([]string{dstPort.Name()}).
+		SetFormat(gosnappi.CaptureFormat.PCAP).SetOverwrite(true)
 
 	srcDev := config.Devices().Add().SetName(atePort1.Name)
 	srcEth := srcDev.Ethernets().Add().SetName(atePort1.Name + ".Eth").SetMac(atePort1.MAC)
@@ -78,20 +82,33 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	v4 := flowipv4.Packet().Add().Ipv4()
 	v4.Src().SetValue(srcIpv4.Address())
 	v4.Dst().SetValue(dstIpv4.Address())
+	// v4.Priority().Dscp().Phb().SetValues([]uint32{10, 20, 30, 40, 50})
 
-	flowipv6 := config.Flows().Add().SetName("Flow-IPv6")
-	flowipv6.Metrics().SetEnable(true)
-	flowipv6.TxRx().Device().
-		SetTxNames([]string{srcIpv6.Name()}).SetRxNames([]string{dstIpv6.Name()})
-	flowipv6.Size().SetFixed(512)
-	flowipv6.Rate().SetPercentage(1)
-	flowipv6.Duration().FixedPackets().SetPackets(1000)
-	e2 := flowipv6.Packet().Add().Ethernet()
-	e2.Src().SetValue(srcEth.Mac())
-	e2.Dst().SetValue(dstEth.Mac())
-	v6 := flowipv6.Packet().Add().Ipv6()
-	v6.Src().SetValue(srcIpv6.Address())
-	v6.Dst().SetValue(dstIpv6.Address())
+	var priorityList []uint32
+	for dscpValue := 49; dscpValue < 55; dscpValue++ {
+		priorityList = append(priorityList, trafficClassFieldsToDecimal(dscpValue, 2))
+	}
+
+	v4.Priority().Raw().SetValues(priorityList)
+
+	flowipv4.EgressPacket().Add().Ethernet()
+	tracking := flowipv4.EgressPacket().Add().Ipv4()
+	tracking.Priority().Raw().MetricTags().Add().SetName("dscpValues").SetOffset(0).SetLength(6)
+	tracking.Priority().Raw().MetricTags().Add().SetName("ecnValues").SetOffset(6).SetLength(2)
+
+	// flowipv6 := config.Flows().Add().SetName("Flow-IPv6")
+	// flowipv6.Metrics().SetEnable(true)
+	// flowipv6.TxRx().Device().
+	// 	SetTxNames([]string{srcIpv6.Name()}).SetRxNames([]string{dstIpv6.Name()})
+	// flowipv6.Size().SetFixed(512)
+	// flowipv6.Rate().SetPercentage(1)
+	// flowipv6.Duration().FixedPackets().SetPackets(1000)
+	// e2 := flowipv6.Packet().Add().Ethernet()
+	// e2.Src().SetValue(srcEth.Mac())
+	// e2.Dst().SetValue(dstEth.Mac())
+	// v6 := flowipv6.Packet().Add().Ipv6()
+	// v6.Src().SetValue(srcIpv6.Address())
+	// v6.Dst().SetValue(dstIpv6.Address())
 
 	t.Logf("Pushing config to ATE and starting protocols...")
 	otg.PushConfig(t, config)
@@ -99,34 +116,81 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	return config
 }
 
+func trafficClassFieldsToDecimal(dscpValue, ecnValue int) uint32 {
+	dscpByte := byte(dscpValue)
+	ecnByte := byte(ecnValue)
+	tosStr := fmt.Sprintf("%06b%02b", dscpByte, ecnByte)
+	tosDec, _ := strconv.ParseInt(tosStr, 2, 64)
+	return uint32(tosDec)
+}
+
+func taggedStats(t *testing.T, ate *ondatra.ATEDevice, dscpValue int) {
+	etPath := gnmi.OTG().Flow("Flow-IPv4").TaggedMetricAny()
+	ets := gnmi.GetAll(t, ate.OTG(), etPath.State())
+
+	dscpAsHex := fmt.Sprintf("0x%02x", dscpValue)
+
+	if len(ets) != 1 {
+		t.Logf("got %d flows, but expected one, this probably indicates that the flow has"+
+			" some packets tagged 01 and some tagged 11 (congestion experienced) -- "+
+			"this should not happen in this test case, will continue validation...", len(ets))
+	}
+
+	for _, et := range ets {
+		if len(et.Tags) != 2 {
+			t.Errorf("expected two metric tags (dscp/ecn) but got %d", len(et.Tags))
+		}
+
+		for _, tag := range et.Tags {
+			tagName := tag.GetTagName()
+			valueAsHex := tag.GetTagValue().GetValueAsHex()
+			t.Logf("flow with dscp value %d, tag name %q, got value %s", dscpValue, tagName, valueAsHex)
+			if strings.Contains(tagName, "dscp") {
+				if valueAsHex != dscpAsHex {
+					t.Errorf("expected dscp bit to be %x, but got %s", dscpAsHex, valueAsHex)
+				}
+			} else {
+				// ECN should be 10 -- ecn capable but no congestion experienced.
+				if valueAsHex != "0x2" {
+					t.Errorf("expected ecn bit to be 0x2, but got %s", valueAsHex)
+				}
+			}
+		}
+	}
+}
+
 func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	time.Sleep(2 * time.Second)
 	trafficDuration := 10 * time.Second
 	otg := ate.OTG()
 	// capture
-	// cs := gosnappi.NewControlState()
-	// cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.START)
-	// otg.SetControlState(t, cs)
+	cs := gosnappi.NewControlState()
+	cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.START)
+	otg.SetControlState(t, cs)
 
 	t.Logf("Starting traffic")
 	otg.StartTraffic(t)
 	time.Sleep(trafficDuration)
 	t.Logf("Stop traffic")
 	otg.StopTraffic(t)
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	otgutils.LogPortMetrics(t, otg, c)
 	otgutils.LogFlowMetrics(t, otg, c)
-	// bytes := otg.GetCapture(t, gosnappi.NewCaptureRequest().SetPortName(c.Ports().Items()[1].Name()))
-	// f, err := os.CreateTemp(".", "pcap")
-	// if err != nil {
-	// 	t.Fatalf("ERROR: Could not create temporary pcap file: %v\n", err)
-	// }
+	for dscpValue := 10; dscpValue < 14; dscpValue++ {
+		taggedStats(t, ate, dscpValue)
+	}
+
+	bytes := otg.GetCapture(t, gosnappi.NewCaptureRequest().SetPortName(c.Ports().Items()[1].Name()))
+	f, err := os.CreateTemp(".", "pcap")
+	if err != nil {
+		t.Fatalf("ERROR: Could not create temporary pcap file: %v\n", err)
+	}
 	// defer os.Remove(f.Name())
 
-	// if _, err := f.Write(bytes); err != nil {
-	// 	t.Fatalf("ERROR: Could not write bytes to pcap file: %v\n", err)
-	// }
-	// f.Close()
+	if _, err := f.Write(bytes); err != nil {
+		t.Fatalf("ERROR: Could not write bytes to pcap file: %v\n", err)
+	}
+	f.Close()
 
 	for _, flow := range c.Flows().Items() {
 		t.Logf("Verifying flow metrics for flow %s\n", flow.Name())
