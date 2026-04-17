@@ -160,11 +160,17 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 }
 
 func configureHardwareInit(t *testing.T, dut *ondatra.DUTDevice) {
-	hardwareInitCfg := cfgplugins.NewDUTHardwareInit(t, dut, cfgplugins.FeatureQOSCounters)
-	if hardwareInitCfg == "" {
-		return
+	t.Helper()
+	features := []cfgplugins.FeatureType{
+		cfgplugins.FeatureANPF,
+		cfgplugins.FeatureQOSIn,
 	}
-	cfgplugins.PushDUTHardwareInitConfig(t, dut, hardwareInitCfg)
+	for _, feature := range features {
+		hardwareInitCfg := cfgplugins.NewDUTHardwareInit(t, dut, feature)
+		if hardwareInitCfg != "" {
+			cfgplugins.PushDUTHardwareInitConfig(t, dut, hardwareInitCfg)
+		}
+	}
 }
 
 func configureDUTPort(t *testing.T, dut *ondatra.DUTDevice, attrs *attrs.Attributes, p *ondatra.Port) {
