@@ -10,25 +10,26 @@ ates {
 
   # This option specific to OTG over Ixia-HW. 
   otg {
-    target: "127.0.0.1:40051" # Change this to the Ixia-c-grpc server endpoint.
+    target: "127.0.0.1:40051"
     insecure: true
-    timeout: 60
+    timeout: 100
   }
 
   gnmi {
-    target: "127.0.0.1:50051"  # Change this to the Ixia-c-gnmi server endpoint.
+    target: "127.0.0.1:50051"
     skip_verify: true
-    timeout: 30
+    timeout: 100
   }
 
   # Before this binding can be used with a topology, add ports mapping
   # from its topology ID to the actual port name on the device.
   ports {
     id: "port1"
-    name: "10.36.95.239;1;5"  # Change this to the ixia-c-hw port location.
+    name: "uhd://tf2-qa4.lbj.is.keysight.com:7531;5+nanorbit0.lbj.is.keysight.com:50075"
   }
   ports {
     id: "port2"
-    name: "10.36.95.239;1;6"  # Change this to the ixia-c-hw port location.
+    name: "uhd://tf2-qa4.lbj.is.keysight.com:7531;6+nanorbit0.lbj.is.keysight.com:50076"
   }
 }
+

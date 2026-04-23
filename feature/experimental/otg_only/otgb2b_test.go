@@ -89,11 +89,11 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		priorityList = append(priorityList, trafficClassFieldsToDecimal(dscpValue, 2))
 	}
 
-	v4.Priority().Raw().SetValues(priorityList)
+	// v4.Priority().Raw().SetValues(priorityList)
 
 	flowipv4.EgressPacket().Add().Ethernet()
 	tracking := flowipv4.EgressPacket().Add().Ipv4()
-	tracking.Priority().Raw().MetricTags().Add().SetName("dscpValues").SetOffset(0).SetLength(6)
+	// tracking.Priority().Raw().MetricTags().Add().SetName("dscpValues").SetOffset(0).SetLength(6)
 	tracking.Priority().Raw().MetricTags().Add().SetName("ecnValues").SetOffset(6).SetLength(2)
 
 	// flowipv6 := config.Flows().Add().SetName("Flow-IPv6")

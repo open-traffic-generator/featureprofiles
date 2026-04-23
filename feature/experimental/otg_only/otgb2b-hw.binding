@@ -5,7 +5,8 @@ options {
 
 ates {
   id: "ate"
-  name: "hw controller"  
+  vendor: IXIA
+  name: "127.0.0.1:40051"  # Change this to the Ixia-C-Controler hostname.
 
   # This option specific to OTG over Ixia-HW. 
   otg {

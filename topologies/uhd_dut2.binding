@@ -1,0 +1,111 @@
+# proto-file: github.com/openconfig/featureprofiles/blob/main/topologies/proto/binding.proto
+# proto-message: openconfig.testing.Binding
+
+# This is an example static binding that demonstrates how to specify
+# options to be used in conjunction with the atedut_*.testbed
+# testbeds.
+
+# These options are inherited throughout the entire binding for both the
+# DUT and the ATE, unless overridden by a specific device or protocol.
+options {
+  username: "admin"
+  password: "cadmin"
+}
+
+duts {
+  id: "dut"
+  vendor: CISCO
+  hardware_model: '8200'
+  name: "10.36.70.7"  # Change this to the device hostname.
+
+  # Options inherited by all protocols on this device unless
+  # overridden by individual protocols.  Remove if not needed.
+  options {
+    insecure: false
+    skip_verify: true
+    username: "admin"
+    password: "cadmin"
+  }
+
+  ssh {
+    target: "10.36.70.7:22"
+    username: "admin"
+    password: "cadmin"
+  }
+
+  config {
+        cli: "copy disk0:fp_config.cfg running-config replace"
+        gribi_flush: true
+  }
+
+  # Options specific to gNMI.  Remove if not needed.
+  gnoi{
+    target: "10.36.70.7:57777"
+  }
+  gnmi {
+    target: "10.36.70.7:57777"
+  }
+  gribi{
+    target: "10.36.70.7:57777"
+  }
+  p4rt{
+    target: "10.36.70.7:57777"
+  }
+
+  # Before this binding can be used with a topology, add ports mapping
+  # from its topology ID to the actual port name on the device.
+  ports {
+    id: "port1"
+    name: "HundredGigE0/0/0/8"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port2"
+    name: "HundredGigE0/0/0/9"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port3"
+    name: "HundredGigE0/0/0/10"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port4"
+    name: "HundredGigE0/0/0/11"  # Change this to the actual port name.
+  }
+}
+
+ates {
+  id: "ate"
+  name: "UHD Controller"  # Change this to the Ixia-C-Controler hostname.
+
+  # This option specific to OTG over Ixia-HW.
+  otg {
+    target: "127.0.0.1:40051" # Change this to the Ixia-c-grpc server endpoint.
+    insecure: true
+    timeout: 30
+  }
+
+  gnmi {
+    target: "127.0.0.1:50051"  # Change this to the Ixia-c-gnmi server endpoint.
+    skip_verify: true
+    timeout: 30
+  }
+
+  # Before this binding can be used with a topology, add ports mapping
+  # from its topology ID to the actual port name on the device.
+  ports {
+    id: "port1"
+    name: "uhd://tf2-qa5.lbj.is.keysight.com:7531;6+10.36.71.78:50076"  # Change this to the ixia-c-hw port location.
+  }
+  ports {
+    id: "port2"
+    name: "uhd://tf2-qa5.lbj.is.keysight.com:7531;4+10.36.71.78:50074"  # Change this to the ixia-c-hw port location.
+  }
+  ports {
+    id: "port3"
+    name: "uhd://tf2-qa5.lbj.is.keysight.com:7531;3+10.36.71.78:50073"  # Change this to the ixia-c-hw port location.
+  }
+  ports {
+    id: "port4"
+    name: "uhd://tf2-qa5.lbj.is.keysight.com:7531;5+10.36.71.78:50075"  # Change this to the ixia-c-hw port location.
+  }
+}
+ 
