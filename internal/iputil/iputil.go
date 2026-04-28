@@ -274,20 +274,27 @@ func GenerateIPv6(startIP string, count uint64) ([]string, error) {
 		return nil, fmt.Errorf("expected IPv6 mask, got %d bits", bits)
 	}
 
-	firstIP := binary.BigEndian.Uint64(netCIDR.IP)
-	netMask := binary.BigEndian.Uint64(netCIDR.Mask)
-	lastIP := (firstIP & netMask) | (netMask ^ 0xffffffff)
-	entries := []string{}
+	ip := new(big.Int).SetBytes(ipBytes)
+	mask := new(big.Int).SetBytes(netCIDR.Mask)
+	networkIP := new(big.Int).And(ip, mask)
 
-	for i := firstIP; i <= lastIP; i++ {
-		ipv6 := make(net.IP, 16)
-		binary.BigEndian.PutUint64(ipv6, i)
-		// make last byte non-zero
-		p, _ := netip.ParsePrefix(fmt.Sprintf("%v/%d", ipv6, maskSize))
-		entries = append(entries, p.Addr().Next().String())
-		if uint64(len(entries)) >= count {
-			break
-		}
+	step := new(big.Int).Lsh(big.NewInt(1), uint(128-maskSize))
+	hostOffset := big.NewInt(1)
+	pmax := new(big.Int).Lsh(big.NewInt(1), 128)
+
+	if count == 0 {
+		count = 1
+	}
+
+	entries := []string{}
+	for i := uint64(0); i < count; i++ {
+		nextInt := new(big.Int).Mul(new(big.Int).SetUint64(i), step)
+		nextInt.Add(nextInt, networkIP)
+		nextInt.Add(nextInt, hostOffset)
+		nextInt.Mod(nextInt, pmax)
+		ipv6 := nextInt.FillBytes(make([]byte, 16))
+		p, _ := netip.ParsePrefix(fmt.Sprintf("%v/%d", net.IP(ipv6), maskSize))
+		entries = append(entries, p.Addr().String())
 	}
 	return entries, nil
 }
