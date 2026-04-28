@@ -314,7 +314,6 @@ type NexthopGroupUDPParams struct {
 	TTL                uint8
 	DSCP               uint8
 	NetworkInstanceObj *oc.NetworkInstance
-	Index              string
 	DeleteTtl          bool
 	DeleteDSCP         bool
 }

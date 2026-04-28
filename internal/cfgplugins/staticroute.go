@@ -133,34 +133,6 @@ func StaticRouteNextNetworkInstance(t *testing.T, dut *ondatra.DUTDevice, cfg *S
 	}
 }
 
-// staticRouteToNextHopGroupCLI configures routes to a next-hop-group for gue encapsulation
-func staticRouteToNextHopGroupCLI(t *testing.T, dut *ondatra.DUTDevice, params StaticRouteCfg) {
-	t.Helper()
-	groupType := ""
-
-	switch params.TrafficType {
-	case oc.Aft_EncapsulationHeaderType_UDPV4:
-		groupType = "ipv4"
-	case oc.Aft_EncapsulationHeaderType_UDPV6:
-		groupType = "ipv6"
-	}
-
-	// Configure traffic policy
-	cli := ""
-	switch dut.Vendor() {
-	case ondatra.ARISTA:
-		cli = fmt.Sprintf(`
-				traffic-policies
-				traffic-policy %s
-      			match %s %s
-         		actions
-            	redirect next-hop group %s`, params.PolicyName, params.Rule, groupType, params.NexthopGroupName)
-		helpers.GnmiCLIConfig(t, dut, cli)
-	default:
-		t.Logf("Unsupported vendor %s for native command support for deviation 'policy-forwarding config'", dut.Vendor())
-	}
-}
-
 // NewStaticVRFRoute configures a static route inside a given VRF on the DUT.
 func NewStaticVRFRoute(t *testing.T, batch *gnmi.SetBatch, cfg *StaticVRFRouteCfg, d *ondatra.DUTDevice) (*oc.NetworkInstance_Protocol_Static, error) {
 	t.Helper()

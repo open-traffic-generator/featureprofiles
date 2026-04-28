@@ -2120,8 +2120,3 @@ func CarrierFt(dut *ondatra.DUTDevice) string {
 func FabricFt(dut *ondatra.DUTDevice) string {
 	return lookupDUTDeviations(dut).GetFabricFt()
 }
-
-// StaticRouteToNextHopGroupOCNotSupported returns true if device does not support oc state path static route to nexthop group
-func StaticRouteToNHGOCUnsupported(dut *ondatra.DUTDevice) bool {
-	return lookupDUTDeviations(dut).GetStaticRouteToNhgOcUnsupported()
-}
