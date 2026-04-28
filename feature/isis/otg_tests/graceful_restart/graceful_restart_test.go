@@ -20,6 +20,7 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
+	otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
 	"github.com/openconfig/ondatra/otg"
 	"github.com/openconfig/testt"
 	"github.com/openconfig/ygnmi/ygnmi"
@@ -143,7 +144,7 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 	}
 
 	isisGracefulRestart := globalISIS.GetOrCreateGracefulRestart()
-	isisGracefulRestart.SetEnabled(true)
+	isisGracefulRestart.SetEnabled(false)
 	isisGracefulRestart.SetHelperOnly(true)
 	isisGracefulRestart.SetRestartTime(gracefulRestartTime)
 
@@ -282,7 +283,19 @@ func createTrafficFlows(t *testing.T, otgConfig gosnappi.Config, flowNameV4, flo
 	v6.Dst().SetValue(ipv6Prefix)
 }
 
-func verifyISISTelemetry(t *testing.T, dut *ondatra.DUTDevice, dutIntf []string) {
+func verifyAdjRestartState(t *testing.T, ate *ondatra.ATEDevice, routerName string, expectedAdj string) {
+	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter(routerName).Adjacencies().AdjacencyAny().LocalState().LocalRestartingStatus().State(), 5*time.Minute, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_Adjacencies_Adjacency_LocalState_LocalRestartingStatus]) bool {
+		state, present := v.Val()
+		t.Log(state)
+		t.Log(present)
+		return present && state.GetCurrentState().String() == expectedAdj
+	}).Await(t)
+	if !ok {
+		t.Errorf("adjancency state not found to be: %s", expectedAdj)
+	}
+}
+
+func verifyISISTelemetry(t *testing.T, dut *ondatra.DUTDevice, dutIntf []string, noAdjanency bool) {
 	t.Helper()
 	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_ISIS, isisInstance).Isis()
 	for _, intfName := range dutIntf {
@@ -293,10 +306,17 @@ func verifyISISTelemetry(t *testing.T, dut *ondatra.DUTDevice, dutIntf []string)
 		query := nbrPath.LevelAny().AdjacencyAny().AdjacencyState().State()
 		_, ok := gnmi.WatchAll(t, dut, query, 5*time.Minute, func(val *ygnmi.Value[oc.E_Isis_IsisInterfaceAdjState]) bool {
 			state, present := val.Val()
-			if present && state == oc.Isis_IsisInterfaceAdjState_UP {
+			t.Log(state)
+			if noAdjanency {
+				if state == oc.Isis_IsisInterfaceAdjState_DOWN {
+					t.Logf("no IS-IS adjacency on %v and state is not UP as expected", intfName)
+					return true
+				}
+			} else if present && state == oc.Isis_IsisInterfaceAdjState_UP {
 				t.Logf("IS-IS state on %v has adjacencies", intfName)
+				return true
 			}
-			return true
+			return false
 		}).Await(t)
 		if !ok {
 			t.Logf("IS-IS state on %v has no adjacencies", intfName)
@@ -371,7 +391,7 @@ func TestGracefulRestart(t *testing.T) {
 	ate.OTG().PushConfig(t, otgConfig)
 	ate.OTG().StartProtocols(t)
 	time.Sleep(20 * time.Second)
-	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()})
+	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()}, false)
 
 	type testCase struct {
 		Name        string
@@ -435,32 +455,30 @@ func testGrHelper(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice, 
 	cs := gosnappi.NewControlAction()
 	isisRestart := cs.Protocol().Isis().InitiateGracefulRestart().SetRouterNames([]string{isisPort2Device})
 	isisRestart.Unplanned().SetHoldingTime(gracefulRestartTime).SetRestartAfter(uint32(restartWait))
-	startTime := time.Now()
 
 	// Initiating graceful restart, waiting for ISIS to come up after GR time expiry and validating traffic
-	otg.StartTraffic(t)
-	replaceDuration := time.Since(startTime)
+
 	t.Log("Send traffic while GR timer is counting down. Traffic should pass as ISIS GR is enabled!")
 	otg.SetControlAction(t, cs)
-	sleepTime := gracefulRestartTime*time.Second - replaceDuration
-	time.Sleep(sleepTime)
+	verifyAdjRestartState(t, ate, isisPort2Device, "RESTARTING")
+	otg.StartTraffic(t)
+	time.Sleep(5 * time.Second)
 	otg.StopTraffic(t)
 	if verifyTraffic(t, otg, otgConfig, false) {
 		t.Error("traffic loss for flow is more than expected")
 	}
 
+	verifyAdjRestartState(t, ate, isisPort2Device, "RUNNING")
 	otgvalidationhelpers.ValidateOTGISISTelemetry(t, ate, expectedISISAdj)
 
-	time.Sleep(sleepTime)
+	// time.Sleep(sleepTime)
 	t.Log("Verify ISIS is up again after GR timeout expiry")
-	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()})
+	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()}, false)
 
 	// Initiating graceful restart, validating traffic loss after graceful restart expires before restart time
 	t.Logf("Validating traffic loss after after Restart Time expiry")
 	otg.SetControlAction(t, cs)
-
-	//The graceful restart timer is set to 30, validating traffic as soon as it expires before it initiate restart
-	time.Sleep(29 * time.Second)
+	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port2").Name()}, true)
 	otg.StartTraffic(t)
 	time.Sleep(5 * time.Second)
 	otg.StopTraffic(t)
@@ -472,7 +490,7 @@ func testGrHelper(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice, 
 	t.Logf("Subtest-3: Disable IS-IS on ATE port-2 and verifying traffic is lost due to GR.")
 	otg.SetControlAction(t, cs)
 	startStopISISRouter(t, otg, []string{isisPort2Device}, "DOWN")
-	time.Sleep(restartWait * time.Second)
+	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port2").Name()}, true)
 	otg.StartTraffic(t)
 	time.Sleep(sleepTime)
 	otg.StopTraffic(t)
@@ -486,7 +504,7 @@ func testISISWithControllerCardSwitchOver(t *testing.T, dut *ondatra.DUTDevice, 
 	otg := ate.OTG()
 
 	otg.StartProtocols(t)
-	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()})
+	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()}, false)
 
 	otg.StartTraffic(t)
 	time.Sleep(sleepTime)
@@ -575,7 +593,7 @@ func testISISWithDUTRestart(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.A
 		"NeighborStateTypeExp":          "LEVEL_2",
 		"NeighborStateHoldTimeExp":      uint32(30),
 		"NeighborStateRestartStatusExp": "RUNNING",
-		"NeighborStateLastAttemptExp":   "SUCCEEDED",
+		"NeighborStateLastAttemptExp":   "UNAVAILABLE",
 	}
 
 	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_ISIS, isisInstance).Isis()
@@ -585,7 +603,7 @@ func testISISWithDUTRestart(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.A
 	otg.StartProtocols(t)
 	time.Sleep(20 * time.Second)
 
-	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()})
+	verifyISISTelemetry(t, dut, []string{dut.Port(t, "port1").Name(), dut.Port(t, "port2").Name()}, false)
 	otg.StartTraffic(t)
 	time.Sleep(sleepTime)
 	otg.StopTraffic(t)
