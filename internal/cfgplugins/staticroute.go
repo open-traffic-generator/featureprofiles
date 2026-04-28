@@ -89,21 +89,22 @@ func NewStaticRouteCfg(batch *gnmi.SetBatch, cfg *StaticRouteCfg, d *ondatra.DUT
 			nhg.SetName(cfg.NexthopGroupName)
 		}
 	}
-	for k, v := range cfg.NextHops {
-		nh := s.GetOrCreateNextHop(k)
-		nh.SetIndex(k)
-		nh.NextHop = v
-		if cfg.Metric != 0 {
-			nh.SetMetric(cfg.Metric)
+	if cfg.NextHops != nil {
+		for k, v := range cfg.NextHops {
+			nh := s.GetOrCreateNextHop(k)
+			nh.SetIndex(k)
+			nh.NextHop = v
+			if cfg.Metric != 0 {
+				nh.SetMetric(cfg.Metric)
+			}
+			if cfg.Recurse {
+				nh.SetRecurse(cfg.Recurse)
+			}
 		}
-		if cfg.Recurse {
-			nh.SetRecurse(cfg.Recurse)
-		}
+		sp := gnmi.OC().NetworkInstance(ni).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, deviations.StaticProtocolName(d))
+		gnmi.BatchUpdate(batch, sp.Config(), c)
+		gnmi.BatchReplace(batch, sp.Static(cfg.Prefix).Config(), s)
 	}
-	sp := gnmi.OC().NetworkInstance(ni).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, deviations.StaticProtocolName(d))
-	gnmi.BatchUpdate(batch, sp.Config(), c)
-	gnmi.BatchReplace(batch, sp.Static(cfg.Prefix).Config(), s)
-
 	return s, nil
 }
 
@@ -129,6 +130,34 @@ func StaticRouteNextNetworkInstance(t *testing.T, dut *ondatra.DUTDevice, cfg *S
 	} else {
 		spNetInst.GetOrCreateNextHop("0").SetNextNetworkInstance("DEFAULT")
 		spNetInst.GetOrCreateNextHop("0").SetNextHop(oc.UnionString(cfg.Prefix))
+	}
+}
+
+// staticRouteToNextHopGroupCLI configures routes to a next-hop-group for gue encapsulation
+func staticRouteToNextHopGroupCLI(t *testing.T, dut *ondatra.DUTDevice, params StaticRouteCfg) {
+	t.Helper()
+	groupType := ""
+
+	switch params.TrafficType {
+	case oc.Aft_EncapsulationHeaderType_UDPV4:
+		groupType = "ipv4"
+	case oc.Aft_EncapsulationHeaderType_UDPV6:
+		groupType = "ipv6"
+	}
+
+	// Configure traffic policy
+	cli := ""
+	switch dut.Vendor() {
+	case ondatra.ARISTA:
+		cli = fmt.Sprintf(`
+				traffic-policies
+				traffic-policy %s
+      			match %s %s
+         		actions
+            	redirect next-hop group %s`, params.PolicyName, params.Rule, groupType, params.NexthopGroupName)
+		helpers.GnmiCLIConfig(t, dut, cli)
+	default:
+		t.Logf("Unsupported vendor %s for native command support for deviation 'policy-forwarding config'", dut.Vendor())
 	}
 }
 
