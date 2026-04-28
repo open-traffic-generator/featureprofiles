@@ -159,8 +159,12 @@ func TestMPLSOverUDPTunnelHashing(t *testing.T) {
 	topo, interfaceNamesList := configureATE(t)
 	ate.OTG().PushConfig(t, topo)
 	ate.OTG().StartProtocols(t)
-	cfgplugins.IsIPv4InterfaceARPresolved(t, ate, cfgplugins.AddressFamilyParams{InterfaceNames: interfaceNamesList})
-	cfgplugins.IsIPv6InterfaceARPresolved(t, ate, cfgplugins.AddressFamilyParams{InterfaceNames: interfaceNamesList})
+	if err := cfgplugins.IsIPv4InterfaceARPresolved(t, ate, cfgplugins.AddressFamilyParams{InterfaceNames: interfaceNamesList}); err != nil {
+		t.Fatalf("IPv4 ARP resolution failed: %v", err)
+	}
+	if err := cfgplugins.IsIPv6InterfaceARPresolved(t, ate, cfgplugins.AddressFamilyParams{InterfaceNames: interfaceNamesList}); err != nil {
+		t.Fatalf("IPv6 ARP resolution failed: %v", err)
+	}
 
 	// Configure gRIBI client
 	c := mustNewGRIBIClient(t, dut)
