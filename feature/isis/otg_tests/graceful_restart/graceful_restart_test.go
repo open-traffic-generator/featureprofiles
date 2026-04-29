@@ -289,11 +289,11 @@ func verifyAdjRestartState(t *testing.T, ate *ondatra.ATEDevice, routerName stri
 		return present && state.GetCurrentState().String() == expectedAdj
 	}).Await(t)
 	if !ok {
-		t.Errorf("adjancency state not found to be: %s", expectedAdj)
+		t.Fatalf("adjacency state not found to be: %s", expectedAdj)
 	}
 }
 
-func verifyISISTelemetry(t *testing.T, dut *ondatra.DUTDevice, dutIntf []string, noAdjanency bool) {
+func verifyISISTelemetry(t *testing.T, dut *ondatra.DUTDevice, dutIntf []string, noAdjacency bool) {
 	t.Helper()
 	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_ISIS, isisInstance).Isis()
 	for _, intfName := range dutIntf {
@@ -304,9 +304,9 @@ func verifyISISTelemetry(t *testing.T, dut *ondatra.DUTDevice, dutIntf []string,
 		query := nbrPath.LevelAny().AdjacencyAny().AdjacencyState().State()
 		_, ok := gnmi.WatchAll(t, dut, query, 5*time.Minute, func(val *ygnmi.Value[oc.E_Isis_IsisInterfaceAdjState]) bool {
 			state, present := val.Val()
-			if noAdjanency {
-				if state == oc.Isis_IsisInterfaceAdjState_DOWN {
-					t.Logf("no IS-IS adjacency on %v and state is not UP as expected", intfName)
+			if noAdjacency {
+				if !present || state == oc.Isis_IsisInterfaceAdjState_DOWN {
+					t.Logf("IS-IS adjacency on %v is DOWN or absent as expected", intfName)
 					return true
 				}
 			} else if present && state == oc.Isis_IsisInterfaceAdjState_UP {
