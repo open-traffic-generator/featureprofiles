@@ -33,7 +33,7 @@ func isStreamClosedErr(err error) bool {
 	}
 	if st, ok := status.FromError(err); ok {
 		switch st.Code() {
-		case codes.Canceled, codes.Unavailable, codes.DeadlineExceeded:
+		case codes.Canceled, codes.Unavailable:
 			return true
 		default:
 			return false
@@ -54,11 +54,13 @@ func prettyPrint(i any) string {
 func TestRecordSubscribeIdleTimeoutDoA(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
 	configureGnsiServiceCLI(t, dut)
-	// acctz.SetupUsers(t, dut, false)
 
 	systemTime := gnmi.Get(t, dut, gnmi.OC().System().CurrentDatetime().State())
-	startTime, _ := time.Parse(time.RFC3339, systemTime)
-	ctx, cancel := context.WithTimeout(t.Context(), defaultIdleTimeout)
+	startTime, err := time.Parse(time.RFC3339, systemTime)
+	if err != nil {
+		t.Errorf("Failed to parse system time %q: %v", systemTime, err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), defaultIdleTimeout+gracePeriod+30*time.Second)
 	defer cancel()
 
 	acctzClient := dut.RawAPIs().GNSI(t).AcctzStream()
