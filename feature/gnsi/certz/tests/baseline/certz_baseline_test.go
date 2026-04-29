@@ -2,6 +2,7 @@ package certzbaseline_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -27,8 +28,7 @@ const (
 )
 
 var (
-	serverAddr string
-	creds      DUTCredentialer
+	creds DUTCredentialer
 )
 
 // DUTCredentialer is an interface for getting credentials from a DUT binding.
@@ -37,9 +37,32 @@ type DUTCredentialer interface {
 	RPCPassword() string
 }
 
+func addProfile(t *testing.T, certzClient certzpb.CertzClient, ctx context.Context) (error string) {
+	resp, err := certzClient.AddProfile(ctx, &certzpb.AddProfileRequest{
+		SslProfileId: testProfile,
+	})
+
+	if err != nil {
+		// If the profile already exists from a prior run, that is also acceptable.
+		if st, ok := status.FromError(err); ok {
+			if st.Code() == codes.AlreadyExists {
+				t.Logf("profile %q already exists on DUT", testProfile)
+				return
+			} else {
+				return fmt.Sprintf("adding profile %s failed due to error: %s", testProfile, st.Code())
+			}
+
+		}
+		return fmt.Sprintf("add profile %s failed: %v", testProfile, err)
+	}
+	if resp == nil {
+		t.Fatalf("AddProfile %s returned nil response", testProfile)
+	}
+	return
+}
+
 func TestCertzBaseline(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
-	serverAddr = dut.Name() //returns the device name.
 	if err := binding.DUTAs(dut.RawAPIs().BindingDUT(), &creds); err != nil {
 		t.Fatalf("STATUS:Failed to get DUT credentials using binding.DUTs: %v. The binding for %s must implement the DUTCredentialer interface.", err, dut.Name())
 	}
@@ -68,9 +91,9 @@ func TestCertzBaseline(t *testing.T) {
 			testFunc:    deleteTLSProfileTest,
 		},
 		{
-			Name:        "Testcase: Get Profile Details",
-			Description: "Get the current details of a TLS service profile from the DUT",
-			testFunc:    getTLSProfileDetailsTest,
+			Name:        "Testcase: Get Profile List",
+			Description: "Validate profile exists in the DUT",
+			testFunc:    getTLSProfile,
 		},
 		{
 			Name:        "Testcase: Validate Metrics",
@@ -99,20 +122,10 @@ func addTLSProfileTest(t *testing.T, dut *ondatra.DUTDevice) {
 	defer cancel()
 	certzClient := dut.RawAPIs().GNSI(t).Certz()
 
-	resp, err := certzClient.AddProfile(ctx, &certzpb.AddProfileRequest{
-		SslProfileId: testProfile,
-	})
-
-	if err != nil {
-		// If the profile already exists from a prior run, that is also acceptable.
-		if st, ok := status.FromError(err); ok && st.Code() == codes.AlreadyExists {
-			t.Logf("profile %q already exists on DUT", testProfile)
-			return
-		}
-		t.Errorf("AddProfile %s failed: %v", testProfile, err)
-	}
-	if resp == nil {
-		t.Fatalf("AddProfile %s returned nil response", testProfile)
+	err := addProfile(t, certzClient, ctx)
+	if err != "" {
+		t.Errorf("failed: %s", err)
+		return
 	}
 
 	//Get ssl profile list.
@@ -150,20 +163,15 @@ func deleteTLSProfileTest(t *testing.T, dut *ondatra.DUTDevice) {
 }
 
 // Implementation for getting the current details of a TLS service profile from the DUT
-func getTLSProfileDetailsTest(t *testing.T, dut *ondatra.DUTDevice) {
+func getTLSProfile(t *testing.T, dut *ondatra.DUTDevice) {
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 	certzClient := dut.RawAPIs().GNSI(t).Certz()
 
-	_, err := certzClient.AddProfile(ctx, &certzpb.AddProfileRequest{
-		SslProfileId: testProfile,
-	})
-
-	if err != nil {
-		// If the profile already exists from a prior run, that is also acceptable.
-		if st, ok := status.FromError(err); ok && st.Code() == codes.AlreadyExists {
-			t.Logf("profile %q exists on DUT", testProfile)
-		}
+	err := addProfile(t, certzClient, ctx)
+	if err != "" {
+		t.Errorf("failed: %s", err)
+		return
 	}
 
 	//Get ssl profile list.
