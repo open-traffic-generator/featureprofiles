@@ -286,8 +286,6 @@ func createTrafficFlows(t *testing.T, otgConfig gosnappi.Config, flowNameV4, flo
 func verifyAdjRestartState(t *testing.T, ate *ondatra.ATEDevice, routerName string, expectedAdj string) {
 	_, ok := gnmi.WatchAll(t, ate.OTG(), gnmi.OTG().IsisRouter(routerName).Adjacencies().AdjacencyAny().LocalState().LocalRestartingStatus().State(), 5*time.Minute, func(v *ygnmi.Value[*otgtelemetry.IsisRouter_Adjacencies_Adjacency_LocalState_LocalRestartingStatus]) bool {
 		state, present := v.Val()
-		t.Log(state)
-		t.Log(present)
 		return present && state.GetCurrentState().String() == expectedAdj
 	}).Await(t)
 	if !ok {
@@ -306,7 +304,6 @@ func verifyISISTelemetry(t *testing.T, dut *ondatra.DUTDevice, dutIntf []string,
 		query := nbrPath.LevelAny().AdjacencyAny().AdjacencyState().State()
 		_, ok := gnmi.WatchAll(t, dut, query, 5*time.Minute, func(val *ygnmi.Value[oc.E_Isis_IsisInterfaceAdjState]) bool {
 			state, present := val.Val()
-			t.Log(state)
 			if noAdjanency {
 				if state == oc.Isis_IsisInterfaceAdjState_DOWN {
 					t.Logf("no IS-IS adjacency on %v and state is not UP as expected", intfName)
