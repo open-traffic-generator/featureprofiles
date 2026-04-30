@@ -583,7 +583,6 @@ func matchRecord(cfg matchRecordConfig) bool {
 }
 
 // deviceRecords collects accounting records from the DUT stream until deadline elapses.
-// Uses a persistent timer instead of time.After to avoid goroutine/timer leaks.
 func deviceRecords(cfg deviceRecordsConfig) ([]*acctzpb.RecordResponse, error) {
 	cfg.t.Helper()
 
@@ -611,8 +610,6 @@ func deviceRecords(cfg deviceRecordsConfig) ([]*acctzpb.RecordResponse, error) {
 
 	timer := time.NewTimer(cfg.deadline)
 	defer timer.Stop()
-	idleTimer := time.NewTimer(10 * time.Second)
-	defer idleTimer.Stop()
 
 	for {
 		select {
@@ -626,17 +623,6 @@ func deviceRecords(cfg deviceRecordsConfig) ([]*acctzpb.RecordResponse, error) {
 				return records, r.err
 			}
 			records = append(records, r.record)
-			// Reset idle timer on each received record.
-			if !idleTimer.Stop() {
-				select {
-				case <-idleTimer.C:
-				default:
-				}
-			}
-			idleTimer.Reset(10 * time.Second)
-		case <-idleTimer.C:
-			// No record received in 10s; keep waiting until deadline.
-			idleTimer.Reset(10 * time.Second)
 		}
 	}
 }
