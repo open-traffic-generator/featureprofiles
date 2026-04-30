@@ -393,14 +393,16 @@ func rpcGNOI(t *testing.T, cfg rpcConfig) error {
 // rpcGNSI executes a gNSI Acctz.RecordSubscribe RPC.
 func rpcGNSI(t *testing.T, cfg rpcConfig) error {
 	t.Helper()
-	stream, err := acctzpb.NewAcctzClient(cfg.conn).RecordSubscribe(cfg.ctx)
+	stream, err := acctzpb.NewAcctzStreamClient(cfg.conn).RecordSubscribe(
+		cfg.ctx,
+		&acctzpb.RecordRequest{Timestamp: timestamppb.New(time.Now())},
+	)
 	if err != nil {
 		if !cfg.failOK {
 			return fmt.Errorf("rpcGNSI: RecordSubscribe failed: %w", err)
 		}
 		return nil
 	}
-	_ = stream.Send(&acctzpb.RecordRequest{Timestamp: timestamppb.New(time.Now())})
 	_, _ = stream.Recv()
 	return nil
 }
