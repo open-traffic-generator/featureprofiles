@@ -1,6 +1,7 @@
 package record_subscribe_idle_timeout_test
 
 import (
+	"context"
 	"io"
 	"testing"
 	"time"
@@ -77,7 +78,9 @@ func TestRecordSubscribeIdleTimeout(t *testing.T) {
 	acctz.SetupUsers(t, dut, true)
 
 	t.Log("First RecordSubscribe, discarding records")
-	firstSub, err := acctzClient.RecordSubscribe(t.Context(), &acctzpb.RecordRequest{
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	firstSub, err := acctzClient.RecordSubscribe(ctx, &acctzpb.RecordRequest{
 		Timestamp: timestamppb.New(getSystemTime(t, dut)),
 	})
 	if err != nil {
