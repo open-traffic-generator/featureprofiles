@@ -22,6 +22,7 @@ import (
 	authzpb "github.com/openconfig/gnsi/authz"
 	certzpb "github.com/openconfig/gnsi/certz"
 	credpb "github.com/openconfig/gnsi/credentialz"
+	enrollzpb "github.com/openconfig/gnsi/enrollz"
 	pathzpb "github.com/openconfig/gnsi/pathz"
 )
 
@@ -45,6 +46,9 @@ func (g gnsiConn) Acctz() accpb.AcctzClient {
 }
 func (g gnsiConn) AcctzStream() accpb.AcctzStreamClient {
 	return accpb.NewAcctzStreamClient(g.conn)
+}
+func (g gnsiConn) Enrollz() enrollzpb.TpmEnrollzServiceClient {
+	return enrollzpb.NewTpmEnrollzServiceClient(g.conn)
 }
 
 var _ = binding.GNSIClients(gnsiConn{})
