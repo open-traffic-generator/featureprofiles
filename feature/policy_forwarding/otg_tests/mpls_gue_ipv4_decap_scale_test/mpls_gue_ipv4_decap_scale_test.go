@@ -58,7 +58,7 @@ const (
 	dutIPv6Len             = 126
 	dutMtu                 = 9202
 	ratePPS                = 100
-	totalPkts              = 1000000
+	totalPkts              = 0
 	sleepTime              = 15
 	carrierDelayUp         = 3000
 	carrierDelayDown       = 150
@@ -82,7 +82,7 @@ var (
 	agg1 = &otgconfighelpers.Port{Name: "Port-Channel1", AggMAC: "02:00:01:01:01:07", MemberPorts: []string{"port1", "port2"}, LagID: 1, IsLag: true}
 	agg2 = &otgconfighelpers.Port{Name: "Port-Channel2", AggMAC: "02:00:01:01:01:01", MemberPorts: []string{"port3", "port4"}, Interfaces: []*otgconfighelpers.InterfaceProperties{agg2interface}, LagID: 2, IsLag: true}
 
-	agg2interface = &otgconfighelpers.InterfaceProperties{IPv4: "194.0.2.2", IPv6: "2001:10:1:6::2", IPv4Gateway: "194.0.2.1", IPv6Gateway: "2001:10:1:6::1", Name: "Port-Channel2", MAC: "02:00:01:01:01:02", IPv4Len: 29, IPv6Len: 64}
+	agg2interface = &otgconfighelpers.InterfaceProperties{IPv4: "194.0.2.2", IPv6: "2001:10:1:6::2", IPv4Gateway: "194.0.2.1", IPv6Gateway: "2001:10:1:6::1", Name: "Port-Channel2", MAC: "02:00:01:01:01:02", IPv4Len: 29, IPv6Len: 126}
 
 	// Custom IMIX settings for all flows.
 	sizeWeightProfile = []otgconfighelpers.SizeWeightPair{
@@ -526,43 +526,71 @@ func waitForOTGProtocolsUpWithRetry(t *testing.T, ate *ondatra.ATEDevice, config
 // createflow configure the traffic streams as per the readme.
 func createflow(t *testing.T, top gosnappi.Config, outer *otgconfighelpers.Flow, inner *otgconfighelpers.Flow, clearFlows bool) {
 	t.Helper()
+
 	if clearFlows {
 		top.Flows().Clear()
 	}
-	outer.CreateFlow(top)
-	outer.AddEthHeader()
+
+	outerCopy := *outer
+
 	if outer.IPv4Flow != nil {
-		outer.AddIPv4Header()
+		ipv4 := *outer.IPv4Flow
+		outerCopy.IPv4Flow = &ipv4
+	}
+	if outer.IPv6Flow != nil {
+		ipv6 := *outer.IPv6Flow
+		outerCopy.IPv6Flow = &ipv6
+	}
+	if outer.TCPFlow != nil {
+		tcp := *outer.TCPFlow
+		outerCopy.TCPFlow = &tcp
 	}
 	if outer.UDPFlow != nil {
-		outer.AddUDPHeader()
+		udp := *outer.UDPFlow
+		outerCopy.UDPFlow = &udp
 	}
 	if outer.MPLSFlow != nil {
-		outer.AddMPLSHeader()
+		mpls := *outer.MPLSFlow
+		outerCopy.MPLSFlow = &mpls
 	}
 
-	if inner.IPv4Flow != nil {
-		ipv4 := *inner.IPv4Flow
-		outer.IPv4Flow = &ipv4
-		outer.AddIPv4Header()
+	outerCopy.CreateFlow(top)
+	outerCopy.AddEthHeader()
+
+	if outerCopy.IPv4Flow != nil {
+		outerCopy.AddIPv4Header()
+	}
+	if outerCopy.UDPFlow != nil {
+		outerCopy.AddUDPHeader()
+	}
+	if outerCopy.MPLSFlow != nil {
+		outerCopy.AddMPLSHeader()
 	}
 
-	if inner.IPv6Flow != nil {
-		ipv6 := *inner.IPv6Flow
-		outer.IPv6Flow = &ipv6
-		outer.AddIPv6Header()
-	}
+	if inner != nil {
+		if inner.IPv4Flow != nil {
+			ipv4 := *inner.IPv4Flow
+			outerCopy.IPv4Flow = &ipv4
+			outerCopy.AddIPv4Header()
+		}
 
-	if inner.TCPFlow != nil {
-		tcp := *inner.TCPFlow
-		outer.TCPFlow = &tcp
-		outer.AddTCPHeader()
-	}
+		if inner.IPv6Flow != nil {
+			ipv6 := *inner.IPv6Flow
+			outerCopy.IPv6Flow = &ipv6
+			outerCopy.AddIPv6Header()
+		}
 
-	if inner.UDPFlow != nil {
-		udp := *inner.UDPFlow
-		outer.UDPFlow = &udp
-		outer.AddUDPHeader()
+		if inner.TCPFlow != nil {
+			tcp := *inner.TCPFlow
+			outerCopy.TCPFlow = &tcp
+			outerCopy.AddTCPHeader()
+		}
+
+		if inner.UDPFlow != nil {
+			udp := *inner.UDPFlow
+			outerCopy.UDPFlow = &udp
+			outerCopy.AddUDPHeader()
+		}
 	}
 }
 
