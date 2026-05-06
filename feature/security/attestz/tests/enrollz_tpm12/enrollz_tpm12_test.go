@@ -1,18 +1,4 @@
-// Copyright 2026 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package enrollz_tpm12
+package enrollz_tpm12_test
 
 import (
 	"context"
@@ -88,13 +74,9 @@ func isMissingStandbyControlCard(err error) bool {
 		strings.Contains(err.Error(), `no control card with role "CONTROL_CARD_ROLE_STANDBY" found`) {
 		return true
 	}
-	// Unimplemented means the device does not support this RPC at all (e.g. older
-	// EOS versions); treat as no standby card present rather than a hard failure.
 	return status.Code(err) == codes.Unimplemented
 }
 
-// enrollzClientReady retries ControlCardVendorID with a fresh client until
-// the enrollz service is ready to accept RPCs or the given timeout elapses.
 func enrollzClientReady(t *testing.T, dut *ondatra.DUTDevice, timeout time.Duration) epb.TpmEnrollzServiceClient {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -146,9 +128,6 @@ func rebootDUT(t *testing.T, dut *ondatra.DUTDevice) {
 		Method: spb.RebootMethod_COLD,
 		Force:  true,
 	}); err != nil {
-		// codes.Unavailable (connection dropped / EOF) is expected: the device
-		// closes the TCP connection while initiating the reboot before it can
-		// send a gRPC response.  Any other error code is genuinely unexpected.
 		if status.Code(err) != codes.Unavailable {
 			t.Fatalf("gNOI Reboot: %v", err)
 		}
@@ -166,9 +145,6 @@ func rebootDUT(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Fatal("DUT did not come back up within 10 minutes after reboot")
 }
 
-// tpm12Deps implements biz.RotateAIKCertInfraDeps by embedding the default TPM 1.2
-// utility and cert verifier implementations and delegating the remaining interface
-// methods to injected clients.
 type tpm12Deps struct {
 	*biz.DefaultTPM12Utils
 	*biz.DefaultTpmCertVerifier
@@ -176,8 +152,6 @@ type tpm12Deps struct {
 	rotDB    biz.ROTDBClient
 	ownerCA  biz.SwitchOwnerCaClient
 }
-
-// ── biz.EnrollzDeviceClient ──────────────────────────────────────────────────
 
 func (d *tpm12Deps) GetIakCert(ctx context.Context, req *epb.GetIakCertRequest) (*epb.GetIakCertResponse, error) {
 	return d.enrollzC.GetIakCert(ctx, req)
@@ -219,7 +193,6 @@ func (d *tpm12Deps) IssueAikCert(ctx context.Context, req *biz.IssueAikCertReq) 
 	return d.ownerCA.IssueAikCert(ctx, req)
 }
 
-// newTPM12Deps wires together the deps needed for biz.RotateAIKCert.
 func newTPM12Deps(enrollzC epb.TpmEnrollzServiceClient, rotDB biz.ROTDBClient, ownerCA biz.SwitchOwnerCaClient) *tpm12Deps {
 	return &tpm12Deps{
 		DefaultTPM12Utils:      &biz.DefaultTPM12Utils{},
@@ -230,8 +203,6 @@ func newTPM12Deps(enrollzC epb.TpmEnrollzServiceClient, rotDB biz.ROTDBClient, o
 	}
 }
 
-// rotateAIKCertErr runs biz.RotateAIKCert for the given card selection and
-// returns any resulting error to the caller.
 func rotateAIKCertErr(ctx context.Context, deps *tpm12Deps, cardSel *cpb.ControlCardSelection) error {
 	return biz.RotateAIKCert(ctx, &biz.RotateAIKCertReq{
 		ControlCardSelection: cardSel,
@@ -239,8 +210,6 @@ func rotateAIKCertErr(ctx context.Context, deps *tpm12Deps, cardSel *cpb.Control
 	})
 }
 
-// rotateAIKCert runs biz.RotateAIKCert for the given card selection, calling
-// t.Fatalf on failure.
 func rotateAIKCert(t *testing.T, ctx context.Context, deps *tpm12Deps, cardSel *cpb.ControlCardSelection) {
 	t.Helper()
 	if err := rotateAIKCertErr(ctx, deps, cardSel); err != nil {
@@ -248,10 +217,6 @@ func rotateAIKCert(t *testing.T, ctx context.Context, deps *tpm12Deps, cardSel *
 	}
 }
 
-// openRotateAIKStream opens a RotateAIKCert bidirectional stream, sends the
-// given request, receives a response, and returns the stream to the caller for
-// continued interaction.  The test is fatally failed on any error before the
-// send/receive completes.
 func openRotateAIKStream(t *testing.T, ctx context.Context, enrollzC epb.TpmEnrollzServiceClient, req *epb.RotateAIKCertRequest) epb.TpmEnrollzService_RotateAIKCertClient {
 	t.Helper()
 	stream, err := enrollzC.RotateAIKCert(ctx)
@@ -264,9 +229,6 @@ func openRotateAIKStream(t *testing.T, ctx context.Context, enrollzC epb.TpmEnro
 	return stream
 }
 
-// sendAndExpectStreamError sends req on stream and asserts that either the
-// send itself or the subsequent Recv returns an error that satisfies
-// requireRejectedRequest.
 func sendAndExpectStreamError(t *testing.T, stream epb.TpmEnrollzService_RotateAIKCertClient, req *epb.RotateAIKCertRequest) {
 	t.Helper()
 	if err := stream.Send(req); err != nil {
@@ -277,9 +239,6 @@ func sendAndExpectStreamError(t *testing.T, stream epb.TpmEnrollzService_RotateA
 	requireRejectedRequest(t, err)
 }
 
-// generateSelfSignedCertPEM generates a self-signed RSA certificate returned
-// as a PEM string, useful for constructing deliberately wrong certificate
-// payloads.
 func generateSelfSignedCertPEM(t *testing.T) string {
 	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -307,8 +266,6 @@ func TestEnrollzTPM12(t *testing.T) {
 	enrollzC := enrollzClient(t, dut)
 	standby := hasStandbyCard(t, ctx, enrollzC)
 
-	// rotDB retrieves the device EK from the TPM via GetIdevidCsr; on Arista
-	// devices the EK public key is embedded in the TCG CSR IDevID contents.
 	rotDB := newAristaROTDBClient(t, dut)
 
 	for _, tc := range []struct {
@@ -316,7 +273,6 @@ func TestEnrollzTPM12(t *testing.T) {
 		desc string
 		fn   func(t *testing.T)
 	}{
-		// ── Successful enrollment ─────────────────────────────────────────────
 		{
 			"enrollz-2.1-SuccessfulEnrollment",
 			"Successful TPM 1.2 RotateAIK enrollment flow",
@@ -329,7 +285,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				t.Log("TPM 1.2 enrollment succeeded – AIK cert installed on all control cards")
 			},
 		},
-		// ── Missing / invalid control_card_selection ──────────────────────────
 		{
 			"enrollz-2.2-MissingControlCardSelection",
 			"RotateAIKCertRequest with missing control_card_selection",
@@ -338,12 +293,10 @@ func TestEnrollzTPM12(t *testing.T) {
 				if err != nil {
 					t.Fatalf("open stream: %v", err)
 				}
-				// Send without control_card_selection set.
 				issuerKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				issuerPub, _ := x509.MarshalPKIXPublicKey(&issuerKey.PublicKey)
 				req := &epb.RotateAIKCertRequest{
 					Value: &epb.RotateAIKCertRequest_IssuerPublicKey{IssuerPublicKey: issuerPub},
-					// ControlCardSelection intentionally omitted.
 				}
 				sendAndExpectStreamError(t, stream, req)
 			},
@@ -369,7 +322,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				sendAndExpectStreamError(t, stream, req)
 			},
 		},
-		// ── Issuer public key validation ──────────────────────────────────────
 		{
 			"enrollz-2.4-MissingIssuerPublicKey",
 			"Initial RotateAIKCertRequest with missing issuer_public_key",
@@ -378,7 +330,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				if err != nil {
 					t.Fatalf("open stream: %v", err)
 				}
-				// Send issuer_public_key variant but with empty bytes.
 				req := &epb.RotateAIKCertRequest{
 					Value:                &epb.RotateAIKCertRequest_IssuerPublicKey{IssuerPublicKey: nil},
 					ControlCardSelection: activeCard(),
@@ -401,7 +352,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				sendAndExpectStreamError(t, stream, req)
 			},
 		},
-		// ── IssuerCertPayload validation ──────────────────────────────────────
 		{
 			"enrollz-2.6-MissingSymmetricKeyBlob",
 			"RotateAIKCertRequest with issuer_cert_payload but missing symmetric_key_blob",
@@ -412,15 +362,12 @@ func TestEnrollzTPM12(t *testing.T) {
 					Value:                &epb.RotateAIKCertRequest_IssuerPublicKey{IssuerPublicKey: issuerPub},
 					ControlCardSelection: activeCard(),
 				})
-				// Read Phase 1 response (TPM_IDENTITY_REQ).
 				if _, err := stream.Recv(); err != nil {
 					t.Fatalf("recv Phase 1 response: %v", err)
 				}
-				// Send IssuerCertPayload with missing symmetric_key_blob.
 				sendAndExpectStreamError(t, stream, &epb.RotateAIKCertRequest{
 					Value: &epb.RotateAIKCertRequest_IssuerCertPayload_{
 						IssuerCertPayload: &epb.RotateAIKCertRequest_IssuerCertPayload{
-							// SymmetricKeyBlob intentionally omitted.
 							AikCertBlob: []byte("fake-aik-cert-blob"),
 						},
 					},
@@ -445,7 +392,6 @@ func TestEnrollzTPM12(t *testing.T) {
 					Value: &epb.RotateAIKCertRequest_IssuerCertPayload_{
 						IssuerCertPayload: &epb.RotateAIKCertRequest_IssuerCertPayload{
 							SymmetricKeyBlob: []byte("fake-sym-key"),
-							// AikCertBlob intentionally omitted.
 						},
 					},
 					ControlCardSelection: activeCard(),
@@ -465,7 +411,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				if _, err := stream.Recv(); err != nil {
 					t.Fatalf("recv Phase 1 response: %v", err)
 				}
-				// Build a symmetric_key_blob encrypted with a random (wrong) RSA key, not the device EK.
 				wrongKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				fakePayload, _ := rsa.EncryptOAEP(
 					newSHA1(), rand.Reader, &wrongKey.PublicKey, []byte("fake-asym-ca-contents"), []byte("TCPA"),
@@ -519,16 +464,12 @@ func TestEnrollzTPM12(t *testing.T) {
 				if err != nil {
 					t.Fatalf("recv Phase 1 response: %v", err)
 				}
-				// Retrieve the real device EK so we can encrypt a payload the device can
-				// decrypt — but use a mismatched AIK digest so TPM_ActivateIdentity fails.
 				ekResp, err := rotDB.FetchEK(ctx, &biz.FetchEKReq{
 					Serial: phase1Resp.GetControlCardId().GetControlCardSerial(),
 				})
 				if err != nil {
 					t.Fatalf("FetchEK: %v", err)
 				}
-				// Build TPM_ASYM_CA_CONTENTS with an all-zero (wrong) digest and encrypt
-				// it with the real EK, so the blob is decryptable but the digest fails.
 				wrongAsymCA := append(make([]byte, 20), []byte("wrong-asym-ca")...)
 				symKeyBlob, _ := rsa.EncryptOAEP(newSHA1(), rand.Reader, ekResp.EkPublicKey, wrongAsymCA, []byte("TCPA"))
 				sendAndExpectStreamError(t, stream, &epb.RotateAIKCertRequest{
@@ -562,8 +503,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				if err != nil {
 					t.Fatalf("FetchEK: %v", err)
 				}
-				// Encrypt a valid-looking TPM_ASYM_CA_CONTENTS blob but pair it with an
-				// aik_cert_blob that was not encrypted with the corresponding session key.
 				fakeAsymCA := make([]byte, 40)
 				symKeyBlob, _ := rsa.EncryptOAEP(newSHA1(), rand.Reader, ekResp.EkPublicKey, fakeAsymCA, []byte("TCPA"))
 				sendAndExpectStreamError(t, stream, &epb.RotateAIKCertRequest{
@@ -581,8 +520,6 @@ func TestEnrollzTPM12(t *testing.T) {
 			"enrollz-2.12-MalformedTPMSymCAAttestation",
 			"RotateAIKCertRequest where aik_cert_blob is a malformed TPM_SYM_CA_ATTESTATION structure",
 			func(t *testing.T) {
-				// The biz layer constructs a well-formed TPM_SYM_CA_ATTESTATION; here we
-				// deliberately send random bytes so parsing fails on the device.
 				issuerKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				issuerPub, _ := x509.MarshalPKIXPublicKey(&issuerKey.PublicKey)
 				stream := openRotateAIKStream(t, ctx, enrollzC, &epb.RotateAIKCertRequest{
@@ -616,9 +553,6 @@ func TestEnrollzTPM12(t *testing.T) {
 			"enrollz-2.13-MalformedDecryptedAikCert",
 			"RotateAIKCertRequest where the decrypted aik_cert_blob contains a malformed PEM certificate",
 			func(t *testing.T) {
-				// Use the full biz flow up to the point where we would send a valid
-				// IssuerCertPayload, but substitute a random aik_cert_blob so the
-				// decrypted cert is garbage.
 				issuerKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				issuerPub, _ := x509.MarshalPKIXPublicKey(&issuerKey.PublicKey)
 				stream := openRotateAIKStream(t, ctx, enrollzC, &epb.RotateAIKCertRequest{
@@ -635,8 +569,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				if err != nil {
 					t.Fatalf("FetchEK: %v", err)
 				}
-				// Build a minimal plausible symmetric_key_blob using the real EK, but the
-				// aik_cert_blob contains "not-pem" which the device cannot parse as a cert.
 				fakeAsymCA := make([]byte, 40)
 				symKeyBlob, _ := rsa.EncryptOAEP(newSHA1(), rand.Reader, ekResp.EkPublicKey, fakeAsymCA, []byte("TCPA"))
 				sendAndExpectStreamError(t, stream, &epb.RotateAIKCertRequest{
@@ -654,8 +586,6 @@ func TestEnrollzTPM12(t *testing.T) {
 			"enrollz-2.14-AikCertForDifferentAIKKey",
 			"aik_cert_blob contains a certificate for a different AIK public key than generated by the device",
 			func(t *testing.T) {
-				// Use the real enrollment flow but substitute a cert signed over a
-				// different (random) public key, so the device detects the mismatch.
 				issuerKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				issuerPub, _ := x509.MarshalPKIXPublicKey(&issuerKey.PublicKey)
 				stream := openRotateAIKStream(t, ctx, enrollzC, &epb.RotateAIKCertRequest{
@@ -672,7 +602,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				if err != nil {
 					t.Fatalf("FetchEK: %v", err)
 				}
-				// Generate a cert for a different key.
 				wrongCertPEM := generateSelfSignedCertPEM(t)
 				fakeAsymCA := make([]byte, 40)
 				symKeyBlob, _ := rsa.EncryptOAEP(newSHA1(), rand.Reader, ekResp.EkPublicKey, fakeAsymCA, []byte("TCPA"))
@@ -687,7 +616,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				})
 			},
 		},
-		// ── Out-of-order finalize ─────────────────────────────────────────────
 		{
 			"enrollz-2.15-FinalizeBeforeAikCertReturned",
 			"Service sends finalize=true before device returns aik_cert in Phase 4",
@@ -698,8 +626,6 @@ func TestEnrollzTPM12(t *testing.T) {
 					Value:                &epb.RotateAIKCertRequest_IssuerPublicKey{IssuerPublicKey: issuerPub},
 					ControlCardSelection: activeCard(),
 				})
-				// Receive Phase 1 response then immediately send finalize instead of
-				// the expected IssuerCertPayload.
 				if _, err := stream.Recv(); err != nil {
 					t.Fatalf("recv Phase 1 response: %v", err)
 				}
@@ -709,7 +635,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				})
 			},
 		},
-		// ── Premature stream close ────────────────────────────────────────────
 		{
 			"enrollz-2.16-PrematureStreamClose",
 			"Service closes the stream prematurely; enrollment is aborted and no cert is persisted",
@@ -726,34 +651,27 @@ func TestEnrollzTPM12(t *testing.T) {
 				}); err != nil {
 					t.Fatalf("send Phase 1: %v", err)
 				}
-				// Read Phase 1 device response.
 				if _, err := stream.Recv(); err != nil {
 					t.Fatalf("recv Phase 1 response: %v", err)
 				}
-				// Close from the service side without sending IssuerCertPayload.
 				if err := stream.CloseSend(); err != nil {
 					t.Fatalf("CloseSend: %v", err)
 				}
-				// The device should either close the stream or return an error.
 				if _, err := stream.Recv(); err != nil {
 					t.Logf("stream closed as expected after premature service close: %v", err)
 				} else {
 					t.Log("device drained the stream without error; enrollment is aborted")
 				}
-				// Verify that no AIK cert is persisted by successfully restarting
-				// enrollment from scratch.
 				freshDeps := newTPM12Deps(enrollzClient(t, dut), rotDB, ownerCA)
 				if err := rotateAIKCertErr(ctx, freshDeps, activeCard()); err != nil {
 					t.Logf("NOTE: re-enrollment after premature close failed: %v", err)
 				}
 			},
 		},
-		// ── Reboot during enrollment ──────────────────────────────────────────
 		{
 			"enrollz-2.17-RebootDuringEnrollmentAndRestart",
 			"Reboot at any time during enrollment (before finalize) and restart enrollment successfully",
 			func(t *testing.T) {
-				// Start enrollment up to Phase 1 to put the DUT in a mid-enrollment state.
 				t.Log("Starting partial enrollment (Phase 1 only) to reach mid-enrollment state...")
 				issuerKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				issuerPub, _ := x509.MarshalPKIXPublicKey(&issuerKey.PublicKey)
@@ -767,7 +685,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				}); err != nil {
 					t.Fatalf("send Phase 1: %v", err)
 				}
-				// Best-effort receive; device may or may not respond before we reboot.
 				if _, err := stream.Recv(); err != nil {
 					t.Logf("Phase 1 recv (may be ok if reboot races): %v", err)
 				}
@@ -787,12 +704,10 @@ func TestEnrollzTPM12(t *testing.T) {
 				t.Log("Re-enrollment after mid-enrollment reboot succeeded")
 			},
 		},
-		// ── Reboot after successful enrollment ────────────────────────────────
 		{
 			"enrollz-2.18-RebootAfterSuccessfulEnrollment",
 			"Reboot after successful enrollment; AIK cert must persist",
 			func(t *testing.T) {
-				// Enroll first so the device has a valid AIK cert.
 				deps := newTPM12Deps(enrollzClient(t, dut), rotDB, ownerCA)
 				rotateAIKCert(t, ctx, deps, activeCard())
 				if standby {
@@ -802,9 +717,6 @@ func TestEnrollzTPM12(t *testing.T) {
 				t.Log("Rebooting DUT after successful enrollment...")
 				rebootDUT(t, dut)
 
-				// After the reboot the device must still be reachable and the AIK cert
-				// must be present (implicitly verified by ControlCardVendorID succeeding
-				// over mTLS using the persisted credentials).
 				postEnrollzC := enrollzClientReady(t, dut, 3*time.Minute)
 				if _, err := postEnrollzC.GetControlCardVendorID(ctx, &epb.GetControlCardVendorIDRequest{
 					ControlCardSelection: activeCard(),
@@ -822,10 +734,6 @@ func TestEnrollzTPM12(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Vendor-specific RoT DB and Owner CA clients
-// ---------------------------------------------------------------------------
-
 type aristaROTDBClient struct {
 	t        *testing.T
 	enrollzC epb.TpmEnrollzServiceClient
@@ -839,16 +747,7 @@ func newAristaROTDBClient(t *testing.T, dut *ondatra.DUTDevice) biz.ROTDBClient 
 	}
 }
 
-// FetchEK satisfies biz.ROTDBClient. The TPM EK certificate is embedded in
-// the TCG_CSR_IDEVID_CONTENT blob that GetIdevidCsr returns in
-// CsrResponse.CsrContents. We parse that blob to extract the EK cert and
-// return its RSA public key. This is the device EK used to wrap the
-// TPM_ASYM_CA_CONTENTS in the RotateAIKCert flow.
 func (c *aristaROTDBClient) FetchEK(ctx context.Context, req *biz.FetchEKReq) (*biz.FetchEKResp, error) {
-	// Use role-based selection rather than serial-based: the biz library may
-	// populate req.Serial with the chassis serial number, but Arista's
-	// GetIdevidCsr only accepts control card serials. Role-based selection
-	// avoids that ambiguity.
 	cardSel := &cpb.ControlCardSelection{
 		ControlCardId: &cpb.ControlCardSelection_Role{
 			Role: cpb.ControlCardRole_CONTROL_CARD_ROLE_ACTIVE,
@@ -887,10 +786,6 @@ func (c *aristaROTDBClient) FetchEK(ctx context.Context, req *biz.FetchEKReq) (*
 	}, nil
 }
 
-// ekRSAPubFromCSRContent extracts the RSA EK public key from a parsed
-// TCG_CSR_IDEVID_CONTENT. EKCert may be an X.509 certificate PEM (when the
-// TPM has a manufacturer-issued EK cert) or a raw PKIX PUBLIC KEY PEM (when
-// ParseTCGCSRIDevIDContent fell back to converting the raw TPMT_PUBLIC blob).
 func ekRSAPubFromCSRContent(csr *biz.TCGCSRIDevIDContents, serial string) (*rsa.PublicKey, error) {
 	if csr.EKCert == "" {
 		return nil, fmt.Errorf("TCG CSR IDevID content has empty EK cert for serial %q", serial)
@@ -925,15 +820,11 @@ func ekRSAPubFromCSRContent(csr *biz.TCGCSRIDevIDContents, serial string) (*rsa.
 	}
 }
 
-// aristaOwnerCAClient implements biz.SwitchOwnerCaClient using a local
-// self-signed CA for testing. In production this would call a real PKI service.
 type aristaOwnerCAClient struct {
 	ca    *x509.Certificate
 	caKey *rsa.PrivateKey
 }
 
-// newAristaOwnerCAClient creates a test owner CA that signs AIK certificates
-// locally using a generated self-signed CA.
 func newAristaOwnerCAClient(t *testing.T) biz.SwitchOwnerCaClient {
 	t.Helper()
 	ca, caKey := generateTestCA(t)
@@ -964,11 +855,6 @@ func (c *aristaOwnerCAClient) IssueAikCert(ctx context.Context, req *biz.IssueAi
 	return &biz.IssueAikCertResp{AikCertPem: certPEM}, nil
 }
 
-// ---------------------------------------------------------------------------
-// Test helpers: CA generation, certificate signing
-// ---------------------------------------------------------------------------
-
-// generateTestCA generates a self-signed RSA CA certificate and private key for testing.
 func generateTestCA(t *testing.T) (*x509.Certificate, *rsa.PrivateKey) {
 	t.Helper()
 	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -995,8 +881,6 @@ func generateTestCA(t *testing.T) (*x509.Certificate, *rsa.PrivateKey) {
 	return ca, caKey
 }
 
-// signPubKeyPEM signs the subject public key (provided as a PEM-encoded public key or
-// certificate) with the given CA, returning a PEM-encoded certificate signed by that CA.
 func signPubKeyPEM(pubKeyPEM string, ca *x509.Certificate, caKey *rsa.PrivateKey) (string, error) {
 	if pubKeyPEM == "" {
 		return "", fmt.Errorf("empty public key PEM")
@@ -1038,8 +922,6 @@ func signPubKeyPEM(pubKeyPEM string, ca *x509.Certificate, caKey *rsa.PrivateKey
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})), nil
 }
 
-// newSHA1 returns a new SHA-1 hash for use with OAEP encryption, matching the
-// OAEP parameter required by TPM 1.2 ("TCPA").
 func newSHA1() hash.Hash {
 	return sha1.New()
 }

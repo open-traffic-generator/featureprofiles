@@ -18,11 +18,11 @@ import (
 	"github.com/openconfig/ondatra/binding"
 	"google.golang.org/grpc"
 
+	enrollzpb "github.com/openconfig/attestz/proto/tpm_enrollz"
 	accpb "github.com/openconfig/gnsi/acctz"
 	authzpb "github.com/openconfig/gnsi/authz"
 	certzpb "github.com/openconfig/gnsi/certz"
 	credpb "github.com/openconfig/gnsi/credentialz"
-	enrollzpb "github.com/openconfig/gnsi/enrollz"
 	pathzpb "github.com/openconfig/gnsi/pathz"
 )
 
