@@ -474,6 +474,8 @@ func GetNextHopGroupCounters(t *testing.T, dut *ondatra.DUTDevice) *gpb.GetRespo
 	if deviations.NexthopGroupPseudowireCountersOcUnsupported(dut) {
 		switch dut.Vendor() {
 		case ondatra.ARISTA:
+			// Nexthop counter ID which helps fetch the counter values from the native path
+			counterId := "4294967295"
 			req := &gpb.GetRequest{
 				Prefix: &gpb.Path{
 					Origin: "eos_native",
@@ -484,7 +486,7 @@ func GetNextHopGroupCounters(t *testing.T, dut *ondatra.DUTDevice) *gpb.GetRespo
 						{Name: "flexCounters"},
 						{Name: "counterTable"},
 						{Name: "Nexthop"},
-						{Name: "4294967295"},
+						{Name: counterId},
 						{Name: "counter"},
 					},
 				},
@@ -504,6 +506,7 @@ func GetNextHopGroupCounters(t *testing.T, dut *ondatra.DUTDevice) *gpb.GetRespo
 			return nil
 		}
 	} else {
+		// TODO: Add counters after https://github.com/openconfig/public/pull/1418 is merged
 		t.Log("OC path is not available for next-hop-group counters")
 	}
 	return nil

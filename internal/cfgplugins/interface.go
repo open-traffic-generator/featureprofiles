@@ -904,9 +904,6 @@ func AddSubInterface(t *testing.T, dut *ondatra.DUTDevice, b *gnmi.SetBatch, i *
 		if deviations.InterfaceEnabled(dut) && !deviations.IPv4MissingEnabled(dut) {
 			sub.GetOrCreateIpv4().SetEnabled(true)
 		}
-		if deviations.RequireRoutedSubinterface0(dut) {
-			sub.GetOrCreateIpv4().SetEnabled(true)
-		}
 	}
 	if s.IPv6Address != nil {
 		sub.GetOrCreateIpv6().GetOrCreateAddress(s.IPv6Address.String()).PrefixLength = ygot.Uint8(uint8(s.IPv6PrefixLen))

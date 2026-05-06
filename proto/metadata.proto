@@ -1275,12 +1275,15 @@ message Metadata {
     // Functional translator to be used for Fragment Punt OC paths
     string fragment_punt_ft = 408;
 
+    // Arista: b/495544007
     // Devices that do not support mpls static pseudowire OC
     bool mpls_static_pseudowire_oc_unsupported = 409;
 
+    // Arista: b/495549829
     // Devices that do not support vlan client encapsulation OC
     bool vlan_client_encapsulation_oc_unsupported = 410;
 
+    // Partner issue: https://partnerissuetracker.corp.google.com/issues/489348278
     // Devices that do not support nexthp-group counters OC
     bool nexthop_group_pseudowire_counters_oc_unsupported = 411;
 
