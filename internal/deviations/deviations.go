@@ -328,6 +328,12 @@ func SubinterfacePacketCountersMissing(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetSubinterfacePacketCountersMissing()
 }
 
+// DefaultSubinterfacePacketCountersMissing returns if device is missing subinterface state packet counters.
+// Default value is false.
+func DefaultSubinterfacePacketCountersMissing(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetDefaultSubinterfacePacketCountersMissing()
+}
+
 // MissingPrePolicyReceivedRoutes returns if device does not support bgp/neighbors/neighbor/afi-safis/afi-safi/state/prefixes/received-pre-policy.
 // Fully-compliant devices should pass with and without this deviation.
 func MissingPrePolicyReceivedRoutes(dut *ondatra.DUTDevice) bool {
@@ -432,12 +438,6 @@ func StorageComponentUnsupported(dut *ondatra.DUTDevice) bool {
 // GNOIFabricComponentRebootUnsupported returns if device does not support use using gNOI to reboot the Fabric Component.
 func GNOIFabricComponentRebootUnsupported(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetGnoiFabricComponentRebootUnsupported()
-}
-
-// NtpNonDefaultVrfUnsupported returns true if the device does not support ntp non-default vrf.
-// Default value is false.
-func NtpNonDefaultVrfUnsupported(dut *ondatra.DUTDevice) bool {
-	return lookupDUTDeviations(dut).GetNtpNonDefaultVrfUnsupported()
 }
 
 // SkipControllerCardPowerAdmin returns if power-admin-state config on controller card should be skipped.
@@ -2101,6 +2101,51 @@ func FragmentPuntPktsUnsupported(dut *ondatra.DUTDevice) bool {
 // FragmentPuntFt returns the functional translator to be used for translating Fragment Punt OC paths.
 func FragmentPuntFt(dut *ondatra.DUTDevice) string {
 	return lookupDUTDeviations(dut).GetFragmentPuntFt()
+}
+
+// AcctzRecordSessionChannelIdUnsupported returns true if the device does not support Acctz record for fail user
+// Juniper: https://partnerissuetracker.corp.google.com/issues/500627000
+func AcctzRecordSessionChannelIdUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetAcctzRecordSessionChannelIdUnsupported()
+}
+
+// CarrierFt returns the functional translator to be used for translating
+// phy-carrier-transitions path.
+func CarrierFt(dut *ondatra.DUTDevice) string {
+	return lookupDUTDeviations(dut).GetCarrierFt()
+}
+
+// FabricFt returns the functional translator name for fabric error telemetry.
+// Cisco: https://partnerissuetracker.corp.google.com/issues/429166378
+func FabricFt(dut *ondatra.DUTDevice) string {
+	return lookupDUTDeviations(dut).GetFabricFt()
+}
+
+// MacsecStateFt returns the functional translator name for macsec state telemetry.
+func MacsecStateFt(dut *ondatra.DUTDevice) string {
+	return lookupDUTDeviations(dut).GetMacsecStateFt()
+}
+
+// MacsecCountersFt returns the functional translator name for macsec counters telemetry.
+func MacsecCountersFt(dut *ondatra.DUTDevice) string {
+	return lookupDUTDeviations(dut).GetMacsecCountersFt()
+}
+
+// EnableMplsStaticOnInterface returns true if device needs MPLS Static enabled explicitly on ingress/egress interface
+func EnableMplsStaticOnInterface(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetEnableMplsStaticOnInterface()
+}
+
+// Device does not support secondary controller card CPU utilization
+// Arista: https://issuetracker.google.com/issues/508666262
+func SecondaryControllerCardCpuUtilizationUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetSecondaryControllerCardCpuUtilizationUnsupported()
+}
+
+// Device does not support secondary controller card memory utilization
+// Arista: https://issuetracker.google.com/issues/508656197
+func SecondaryControllerCardMemoryUtilizationUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetSecondaryControllerCardMemoryUtilizationUnsupported()
 }
 
 // Mpls static pseudowire returns true if oc is not supported

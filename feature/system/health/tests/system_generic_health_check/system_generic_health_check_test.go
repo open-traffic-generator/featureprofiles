@@ -267,7 +267,20 @@ func TestControllerCardsNoHighCPUSpike(t *testing.T) {
 			})
 
 		}
+
+		if deviations.SecondaryControllerCardCpuUtilizationUnsupported(dut) {
+			var activeControllerCards []string
+			for _, controllerCard := range controllerCards {
+				if gnmi.Get(t, dut, gnmi.OC().Component(controllerCard).RedundantRole().State()) == oc.Platform_ComponentRedundantRole_SECONDARY {
+					t.Logf("INFO: Ignoring controller card component %s due to deviation secondary_controller_card_cpu_utilization_unsupported.", controllerCard)
+				} else {
+					activeControllerCards = append(activeControllerCards, controllerCard)
+				}
+			}
+			controllerCards = activeControllerCards
+		}
 	}
+
 	if len(controllerCards) > 0 {
 		t.Errorf("ERROR: Didn't find cpu card for controllerCards %s", controllerCards)
 	}
@@ -402,12 +415,22 @@ func TestComponentsNoHighMemoryUtilization(t *testing.T) {
 			timestamp := time.Now().Round(time.Second)
 			componentState := gnmi.Get(t, dut, query)
 			componentType := componentState.GetType()
+			componentPath := gnmi.OC().Component(component)
+
 			if componentType == lineCardType && deviations.LinecardMemoryUtilizationUnsupported(dut) {
 				t.Skipf("INFO: Skipping test for linecard component %s due to deviation linecard_memory_utilization_unsupported", component)
 			}
-			if componentType == lineCardType && !gnmi.Get(t, dut, gnmi.OC().Component(component).Removable().State()) {
+
+			if componentType == lineCardType && !gnmi.Get(t, dut, componentPath.Removable().State()) {
 				t.Skipf("Skip the test on non-removable linecard.")
 			}
+
+			if deviations.SecondaryControllerCardMemoryUtilizationUnsupported(dut) {
+				if componentType == controllerCardType && gnmi.Get(t, dut, componentPath.RedundantRole().State()) == oc.Platform_ComponentRedundantRole_SECONDARY {
+					t.Skipf("INFO: Skipping test for secondary controller card component %s due to deviation secondary_controller_card_memory_utilization_unsupported", component)
+				}
+			}
+
 			memoryState := componentState.GetMemory()
 			if memoryState == nil {
 				t.Errorf("ERROR: %s - Device: %s - %s: %-40s - Type: %-20s - Memory data not available",
@@ -643,10 +666,19 @@ func TestInterfaceStatus(t *testing.T) {
 			} else {
 				t.Logf("INFO: Type: %s", root.GetType())
 			}
-			if root.Description == nil {
-				t.Errorf("ERROR: Description is not present")
-			} else {
-				t.Logf("INFO: Description: %s", root.GetType())
+			cfgDesc, cfgPresent := gnmi.Lookup(t, dut, gnmi.OC().Interface(intf).Description().Config()).Val()
+			gotDesc := root.GetDescription()
+			switch {
+			case cfgPresent && root.Description == nil:
+				t.Errorf("ERROR: Description is not present in state, but config is set to %q", cfgDesc)
+			case cfgPresent && gotDesc != cfgDesc:
+				t.Errorf("ERROR: Description mismatch, got %q, want %q", gotDesc, cfgDesc)
+			case cfgPresent:
+				t.Logf("INFO: Description: %s", gotDesc)
+			case root.Description != nil:
+				t.Logf("INFO: Description is present in state without config: %s", gotDesc)
+			default:
+				t.Logf("INFO: Description is not configured; skipping interface state description check")
 			}
 			if root.GetCounters().OutOctets == nil {
 				t.Errorf("ERROR: Counter OutOctets is not present")
