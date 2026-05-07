@@ -33,6 +33,6 @@ platform_exceptions: {
     vendor: CISCO
   }
   deviations: {
-    default_bgp_instance_name: "BGP"
+    default_bgp_instance_name: "default"
   }
 }
