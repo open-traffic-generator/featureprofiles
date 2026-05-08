@@ -92,16 +92,29 @@ func TestRecordSubscribeIdleTimeoutDoA(t *testing.T) {
 
 func configureGnsiServiceCLI(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Helper()
-	t.Log("Configuring gnsi service through CLI")
-	gnsiServerConfig := fmt.Sprintf(`
-	management api gnmi
-    transport grpc default
-      ssl profile %s
-	!
-	management api gnsi
-    transport gnmi default
-    service acctz
-    !
+	var config string
+	switch dut.Vendor() {
+	case ondatra.ARISTA:
+		config = fmt.Sprintf(`
+management api gnmi
+  transport grpc default
+    ssl profile %s
+!
+management api gnsi
+  transport gnmi default
+  service acctz
+!
 `, gnsiProfileName)
-	helpers.GnmiCLIConfig(t, dut, gnsiServerConfig)
+	case ondatra.CISCO:
+		config = `
+aaa accounting commands default start-stop group tacacs+
+aaa accounting exec default start-stop group tacacs+
+grpc aaa accounting queue-size 100
+grpc aaa accounting history-memory 80
+`
+	default:
+		t.Fatalf("Unsupported vendor: %s", dut.Vendor())
+	}
+
+	helpers.GnmiCLIConfig(t, dut, config)
 }
