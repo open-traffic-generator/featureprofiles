@@ -2148,6 +2148,12 @@ func SecondaryControllerCardMemoryUtilizationUnsupported(dut *ondatra.DUTDevice)
 	return lookupDUTDeviations(dut).GetSecondaryControllerCardMemoryUtilizationUnsupported()
 }
 
+// Device does not support interface counters in fcs errors
+// Arista: https://issuetracker.google.com/issues/508304903
+func InterfaceCountersInFcsErrorsUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetInterfaceCountersInFcsErrorsUnsupported()
+}
+
 // Mpls static pseudowire returns true if oc is not supported
 func MplsStaticPseudowireOcUnsupported(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetMplsStaticPseudowireOcUnsupported()
