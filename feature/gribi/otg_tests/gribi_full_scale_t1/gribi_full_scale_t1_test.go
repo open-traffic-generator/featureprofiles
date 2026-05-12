@@ -100,14 +100,8 @@ func TestGRIBIFullScaleT1(t *testing.T) {
 	ateConfig, interfaceNamesList := cfgplugins.ConfigureOTG(t, ate, dut)
 	ate.OTG().PushConfig(t, ateConfig)
 	ate.OTG().StartProtocols(t)
-	// Limiting it to 100 since checking ARP for 1024 interfaces takes long time
-	ifs := interfaceNamesList
-	if len(ifs) >= 100 {
-		ifs = ifs[:100]
-	}
-	cfgplugins.IsIPv4InterfaceARPresolved(t, ate, cfgplugins.AddressFamilyParams{InterfaceNames: ifs})
-	cfgplugins.IsIPv6InterfaceARPresolved(t, ate, cfgplugins.AddressFamilyParams{InterfaceNames: ifs})
-
+	cfgplugins.IsIPv4InterfaceARPresolved(t, ate, cfgplugins.AddressFamilyParams{InterfaceNames: interfaceNamesList})
+	cfgplugins.IsIPv6InterfaceARPresolved(t, ate, cfgplugins.AddressFamilyParams{InterfaceNames: interfaceNamesList})
 	t.Run("Configure and validate FIB_PROGRAMMED, Hierarchical route structure", func(t *testing.T) {
 		// DEFAULT VRF
 		t.Log("Default VRF entries (A/B/C)")
