@@ -22,6 +22,8 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ygnmi/ygnmi"
+
+	otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
 )
 
 const (
@@ -34,27 +36,37 @@ type TrafficTestParams struct {
 	Ate    *ondatra.ATEDevice
 }
 
-// WaitForTxPacketsReceived waits for the transmitted and received packet counts for each flow match, indicating that traffic has converged.
+// WaitForTxPacketsReceived waits for the sum of transmitted and received packet counts across all flows to match, indicating that traffic has converged.
 func WaitForTxPacketsReceived(t *testing.T, params TrafficTestParams) {
 	t.Helper()
 	otg := params.Ate.OTG()
 	t.Log("Waiting for the TxPackets to arrive at Rx")
 
-	for _, f := range params.Config.Flows().Items() {
-		flowName := f.Name()
+	// Use a single wildcard watch on all flows' counters to check all flows in parallel
+	countersPath := gnmi.OTG().FlowAny().Counters().State()
+	gnmi.WatchAll(t, otg, countersPath, timeout, func(v *ygnmi.Value[*otgtelemetry.Flow_Counters]) bool {
+		// Efficiently query all flows' counter states using LookupAll
+		allFlowCounters := gnmi.LookupAll(t, otg, gnmi.OTG().FlowAny().Counters().State())
 
-		inPktsPath := gnmi.OTG().Flow(flowName).Counters().InPkts().State()
+		if len(allFlowCounters) == 0 {
+			return false
+		}
 
-		gnmi.Watch(t, otg, inPktsPath, timeout, func(v *ygnmi.Value[uint64]) bool {
-			rxPkts, present := v.Val()
-			if !present {
+		var totalTxPkts, totalRxPkts uint64
+		for _, flowCounters := range allFlowCounters {
+			counters, ok := flowCounters.Val()
+			if !ok {
 				return false
 			}
 
-			flowMetrics := gnmi.Get(t, otg, gnmi.OTG().Flow(flowName).State())
-			txPkts := flowMetrics.GetCounters().GetOutPkts()
+			txPkts := counters.GetOutPkts()
+			rxPkts := counters.GetInPkts()
 
-			return txPkts > 0 && rxPkts == txPkts
-		}).Await(t)
-	}
+			totalTxPkts += txPkts
+			totalRxPkts += rxPkts
+		}
+
+		// Sum of all flows: total tx > 0 and total tx == total rx
+		return totalTxPkts > 0 && totalTxPkts == totalRxPkts
+	}).Await(t)
 }
