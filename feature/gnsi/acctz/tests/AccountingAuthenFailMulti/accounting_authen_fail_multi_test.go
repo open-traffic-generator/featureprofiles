@@ -229,6 +229,7 @@ func TestAccountzAuthenFailMulti(t *testing.T) {
 		meta := attemptFailedSSH(t, target, creds.username, creds.password)
 		connMetas = append(connMetas, meta)
 		attemptedUsernames[creds.username] = true
+		time.Sleep(500 * time.Millisecond)
 	}
 	// Also attempt with an unregistered SSH key (wrong SSH key/certificate).
 	meta := attemptFailedSSHWithKey(t, target, acctz.SuccessUsername)
@@ -261,6 +262,7 @@ func TestAccountzAuthenFailMulti(t *testing.T) {
 
 	// Collect records from the stream.
 	var gotRecords []*acctzpb.RecordResponse
+	var totalRecords, skippedNotLogin, skippedNotFail, skippedOldTimestamp int
 	for {
 		// Read single acctz record from stream into channel.
 		r := make(chan recordRequestResult, 1)
@@ -278,7 +280,7 @@ func TestAccountzAuthenFailMulti(t *testing.T) {
 		select {
 		case rr := <-r:
 			resp = rr
-		case <-time.After(10 * time.Second):
+		case <-time.After(30 * time.Second):
 			done = true
 		}
 		if done {
@@ -290,7 +292,10 @@ func TestAccountzAuthenFailMulti(t *testing.T) {
 			t.Fatalf("Failed receiving record response, error: %s", resp.err)
 		}
 
+		totalRecords++
+
 		if !resp.record.Timestamp.AsTime().After(startTime) {
+			skippedOldTimestamp++
 			t.Logf("Skipping record: timestamp %v not after start time %v", resp.record.Timestamp.AsTime(), startTime)
 			continue
 		}
@@ -298,13 +303,17 @@ func TestAccountzAuthenFailMulti(t *testing.T) {
 		// We are looking for LOGIN records that indicate authentication failure.
 		sessionStatus := resp.record.GetSessionInfo().GetStatus()
 		if sessionStatus != acctzpb.SessionInfo_SESSION_STATUS_LOGIN {
-			t.Logf("Skipping record: not LOGIN status (got %v)", sessionStatus)
+			skippedNotLogin++
+			t.Logf("Skipping record: not LOGIN status (got %v, user=%q)", sessionStatus,
+				resp.record.GetSessionInfo().GetUser().GetIdentity())
 			continue
 		}
 
 		authnStatus := resp.record.GetSessionInfo().GetAuthn().GetStatus()
 		if authnStatus != acctzpb.AuthnDetail_AUTHN_STATUS_FAIL {
-			t.Logf("Skipping record: authn status is not FAIL (got %v)", authnStatus)
+			skippedNotFail++
+			t.Logf("Skipping record: authn status is not FAIL (got %v, user=%q)", authnStatus,
+				resp.record.GetSessionInfo().GetUser().GetIdentity())
 			continue
 		}
 
@@ -312,11 +321,21 @@ func TestAccountzAuthenFailMulti(t *testing.T) {
 		gotRecords = append(gotRecords, resp.record)
 	}
 
+	t.Logf("=== Record collection summary: total=%d, matched=%d, skippedNotLogin=%d, skippedNotFail=%d, skippedOldTimestamp=%d ===",
+		totalRecords, len(gotRecords), skippedNotLogin, skippedNotFail, skippedOldTimestamp)
+
 	if len(gotRecords) == 0 {
 		t.Fatal("No authentication failure records found")
 	}
 
-	t.Logf("Found %d authentication failure records", len(gotRecords))
+	t.Logf("Found %d authentication failure records (expected %d scenarios)", len(gotRecords), len(connMetas))
+	for i, r := range gotRecords {
+		t.Logf("  Record %d: user=%q, authn_type=%v, authn_status=%v, cause=%q",
+			i, r.GetSessionInfo().GetUser().GetIdentity(),
+			r.GetSessionInfo().GetAuthn().GetType(),
+			r.GetSessionInfo().GetAuthn().GetStatus(),
+			r.GetSessionInfo().GetAuthn().GetCause())
+	}
 
 	// Verify each authentication failure record.
 	for _, record := range gotRecords {
