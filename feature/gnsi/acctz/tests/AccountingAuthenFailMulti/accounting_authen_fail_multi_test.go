@@ -261,18 +261,16 @@ func TestAccountzAuthenFailMulti(t *testing.T) {
 
 	// Collect records from the stream.
 	var gotRecords []*acctzpb.RecordResponse
-	r := make(chan recordRequestResult)
-
 	for {
 		// Read single acctz record from stream into channel.
-		go func(r chan recordRequestResult) {
-			var response *acctzpb.RecordResponse
-			response, err = acctzSubClient.Recv()
+		r := make(chan recordRequestResult, 1)
+		go func() {
+			response, err := acctzSubClient.Recv()
 			r <- recordRequestResult{
 				record: response,
 				err:    err,
 			}
-		}(r)
+		}()
 
 		var done bool
 		var resp recordRequestResult
