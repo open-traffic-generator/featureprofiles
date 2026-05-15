@@ -66,8 +66,6 @@ type trafficFlow struct {
 type testCase struct {
 	name            string
 	flow            trafficFlow
-	decapHeaderv4   *packetvalidationhelpers.IPv4Layer
-	decapHeaderv6   *packetvalidationhelpers.IPv6Layer
 	decapValidation *packetvalidationhelpers.PacketValidation
 	testFunc        func(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice, otg *otg.OTG, otgConfig gosnappi.Config, tc testCase)
 }
@@ -313,9 +311,8 @@ func createflow(top gosnappi.Config, params *otgconfighelpers.Flow, paramsMiddle
 }
 
 func sendTrafficCapture(t *testing.T, ate *ondatra.ATEDevice) {
-	cs := gosnappi.NewControlState()
+	cs := packetvalidationhelpers.StartCapture(t, ate)
 	ate.OTG().StartTraffic(t)
-	cs = packetvalidationhelpers.StartCapture(t, ate)
 	time.Sleep(60 * time.Second)
 	ate.OTG().StopTraffic(t)
 	time.Sleep(60 * time.Second)
