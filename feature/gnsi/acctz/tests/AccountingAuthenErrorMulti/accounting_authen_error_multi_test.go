@@ -3,7 +3,9 @@ package accounting_authen_error_multi_test
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"regexp"
 	"strconv"
@@ -279,9 +281,9 @@ func dialAndFail(t *testing.T, target, username, password string, attempt int) (
 	tcpConn, err := net.DialTimeout("tcp", target, dialTimeout)
 
 	if err != nil {
-		t.Logf("TCP dial failed: %v", err)
-		return connRecord{}, false
+		t.Fatalf("TCP dial failed: %v", err)
 	}
+	defer tcpConn.Close()
 
 	localAddr, localPort := mustHostPortInfo(t, tcpConn.LocalAddr().String())
 	remoteAddr, remotePort := mustHostPortInfo(t, tcpConn.RemoteAddr().String())
@@ -349,42 +351,55 @@ func dialAndFail(t *testing.T, target, username, password string, attempt int) (
 // A timeout expiration is treated as a successful completion and returns the records collected up to that point.
 func deviceRecords(cfg deviceRecordsConfig) ([]*acctzpb.RecordResponse, error) {
 	cfg.t.Helper()
-	var (
-		records []*acctzpb.RecordResponse
-		rChan   = make(chan struct {
-			record *acctzpb.RecordResponse
-			err    error
-		})
-	)
+	type result struct {
+		record *acctzpb.RecordResponse
+		err    error
+	}
+	var records []*acctzpb.RecordResponse
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.deadline)
+
+	defer cancel()
+
+	rChan := make(chan result, 1)
 
 	go func() {
 		defer close(rChan)
+
 		for {
 			resp, err := cfg.client.Recv()
-			rChan <- struct {
-				record *acctzpb.RecordResponse
-				err    error
-			}{resp, err}
+			select {
+			case rChan <- result{
+				record: resp,
+				err:    err,
+			}:
+
+			case <-ctx.Done():
+				return
+			}
+
 			if err != nil {
 				return
 			}
 		}
 	}()
 
-	timer := time.NewTimer(cfg.deadline)
-	defer timer.Stop()
-
 	for {
 		select {
-		case <-timer.C:
+		case <-ctx.Done():
 			return records, nil
+
 		case r, ok := <-rChan:
 			if !ok {
 				return records, nil
 			}
+
 			if r.err != nil {
-				return records, r.err
+				if errors.Is(r.err, io.EOF) {
+					return records, nil
+				}
+				cfg.t.Fatalf("RecordSubscribe Recv() failed: %v", r.err)
 			}
+
 			records = append(records, r.record)
 		}
 	}
