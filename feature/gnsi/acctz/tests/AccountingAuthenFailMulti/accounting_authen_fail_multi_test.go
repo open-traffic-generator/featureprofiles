@@ -57,8 +57,8 @@ type invalidCredentials struct {
 	authnType   acctzpb.AuthnDetail_AuthnType
 }
 
-// getInvalidCredentialSets returns the set of invalid password credential combinations to test.
-func getInvalidCredentialSets() []invalidCredentials {
+// InvalidCredentialSets returns the set of invalid password credential combinations to test.
+func InvalidCredentialSets() []invalidCredentials {
 	return []invalidCredentials{
 		{
 			description: "empty username",
@@ -222,7 +222,7 @@ func TestAccountzAuthenFailMulti(t *testing.T) {
 
 	// Attempt SSH connections with various invalid credentials, recording attempted usernames
 	// and connection metadata for later correlation with accounting records.
-	credSets := getInvalidCredentialSets()
+	credSets := InvalidCredentialSets()
 	attemptedUsernames := make(map[string]bool)
 	var connMetas []*connMetadata
 	for _, creds := range credSets {
