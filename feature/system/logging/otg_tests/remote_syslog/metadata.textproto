@@ -24,6 +24,17 @@ platform_exceptions: {
   }
   deviations: {
     syslog_oc_unsupported: true
+    syslog_non_default_vrf_unsupported: true
   }
 }
 
+platform_exceptions: {
+  platform: {
+    vendor: NOKIA
+  }
+  deviations: {
+    static_protocol_name: "static"
+    interface_enabled: true
+    explicit_interface_in_default_vrf: true
+  }
+}

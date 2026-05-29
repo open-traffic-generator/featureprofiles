@@ -8,3 +8,4 @@ openconfig_public/
 protobuf-import/
 *.log
 feature/experimental/ate_only/ixnetwork*
+sample.rest
