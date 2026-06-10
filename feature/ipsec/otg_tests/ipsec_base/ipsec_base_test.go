@@ -877,7 +877,9 @@ func waitForOTGMACSecUp(t *testing.T, ate *ondatra.ATEDevice, ifName string, tim
 // enableCapture enables packet capture on specified OTG ports by adding to topology
 func enableCapture(t *testing.T, topo gosnappi.Config, otgPortNames []string) gosnappi.Config {
 	t.Helper()
-	topo.Captures().Add().SetName("capture").SetPortNames(otgPortNames).SetFormat(gosnappi.CaptureFormat.PCAP)
+	cap := topo.Captures().Add().SetName("capture").SetPortNames(otgPortNames).SetFormat(gosnappi.CaptureFormat.PCAP)
+	filter := cap.Filters().Add()
+	filter.Ethernet().EtherType().SetValue("0x88E5") // Capture only MACsec-encrypted packets (EtherType 0x88E5)
 	return topo
 }
 
