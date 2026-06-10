@@ -75,8 +75,8 @@ const (
 	macsecPeerName = "Peer A"
 
 	// OTG flow names.
-	flowIPv4 = "Flow-2"
-	flowIPv6 = "Flow-IPv6-2"
+	flowIPv4 = "Flow-IPv4"
+	flowIPv6 = "Flow-IPv6"
 
 	// Traffic generation parameters.
 	trafficPPS   = 100
@@ -868,7 +868,7 @@ func verifyCapturedMACSecPackets(t *testing.T, packetBytes []byte, portName stri
 	}
 
 	// Write capture to temporary pcap file for analysis
-	f, err := os.CreateTemp(".", ".pcap")
+	f, err := os.CreateTemp("", ".pcap")
 	if err != nil {
 		t.Fatalf("Could not create temporary pcap file: %v", err)
 	}
