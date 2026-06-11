@@ -8,67 +8,146 @@
 # These options are inherited throughout the entire binding for both the
 # DUT and the ATE, unless overridden by a specific device or protocol.
 options {
-  username: "test"
-  password: "test"
+  username: "admin"
+  password: "admin"
 }
 
 duts {
-  id: "dut"
-  name: "dut-hostname"  # Change this to the device hostname.
+  id: "dut1"
+  name: "10.36.111.196"  # Change this to the device hostname.
+  vendor: ARISTA
 
   # Options inherited by all protocols on this device unless
   # overridden by individual protocols.  Remove if not needed.
   options {
-    insecure: true
+    insecure: false
+    skip_verify: true
+    username: "admin"
+    password: "admin"
   }
+
+  ssh {
+    target: "10.36.111.196:22"
+    username: "admin"
+    password: "admin"
+  }
+
+  config {
+    cli: "configure replace flash:fp_config.cfg"
+  }
+
 
   # Options specific to gNMI.  Remove if not needed.
   gnmi {
-    target: "dut-proxy-hostname:6030"
+    target: "10.36.111.196:6030"
+    insecure: true
+  }
+  
+  # Before this binding can be used with a topology, add ports mapping
+  # from its topology ID to the actual port name on the device.
+  ports {
+    id: "port1"
+    name: "Ethernet35/1"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port2"
+    name: "Ethernet36/1"  # Change this to the actual port name.
+  }
+    ports {
+    id: "port3"
+    name: "Ethernet33/1"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port4"
+    name: "Ethernet34/1"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port5"
+    name: "Ethernet9/1"  # Change this to the actual port name.
+  }
+}
+
+
+duts {
+  id: "dut2"
+  name: "10.36.111.158"  # Change this to the device hostname.
+  vendor: ARISTA
+
+  # Options inherited by all protocols on this device unless
+  # overridden by individual protocols.  Remove if not needed.
+  options {
+    insecure: false
+    skip_verify: true
+    username: "admin"
+    password: "admin"
   }
 
-  # Options specific to gNOI
-  gnoi {
-    max_recv_msg_size: 40000000
+  ssh {
+    target: "10.36.111.158:22"
+    username: "admin"
+    password: "admin"
+  }
+
+  config {
+    cli: "configure replace flash:fp_config.cfg"
+  }
+
+
+  # Options specific to gNMI.  Remove if not needed.
+  gnmi {
+    target: "10.36.111.158:6030"
+    insecure: true
   }
 
   # Before this binding can be used with a topology, add ports mapping
   # from its topology ID to the actual port name on the device.
   ports {
     id: "port1"
-    name: "Ethernet1/1"  # Change this to the actual port name.
+    name: "Ethernet3/35/1"  # Change this to the actual port name.
   }
   ports {
     id: "port2"
-    name: "Ethernet2/1"  # Change this to the actual port name.
+    name: "Ethernet3/36/1"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port3"
+    name: "Ethernet4/35/1"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port4"
+    name: "Ethernet4/36/1"  # Change this to the actual port name.
+  }
+  ports {
+    id: "port5"
+    name: "Ethernet3/3/7"  # Change this to the actual port name.
   }
 }
 
 ates {
   id: "ate"
-  name: "ixia-c-hostname"  # Change this to the Ixia-C-Controler hostname.
+  name: "127.0.0.1:40051"  # Change this to the Ixia-C-Controler hostname.
 
-  # This option specific to OTG over Ixia-HW. 
+  # This option specific to OTG over Ixia-HW.
   otg {
-    target: "ixia-c-hostname:40051" # Change this to the Ixia-c-grpc server endpoint.
+    target: "127.0.0.1:40051" # Change this to the Ixia-c-grpc server endpoint.
     insecure: true
-    timeout: 30
+    timeout: 200
   }
 
   gnmi {
-    target: "ixia-c-hostname:50051"  # Change this to the Ixia-c-gnmi server endpoint.
+    target: "127.0.0.1:50051"  # Change this to the Ixia-c-gnmi server endpoint.
     skip_verify: true
-    timeout: 30
+    timeout: 200
   }
 
   # Before this binding can be used with a topology, add ports mapping
   # from its topology ID to the actual port name on the device.
   ports {
     id: "port1"
-    name: "10.36.78.183/1"  # Change this to the ixia-c-hw port location.
+    name: "ares1-us19370015.lbj.is.keysight.com/1.1"  # Change this to the ixia-c-hw port location.
   }
   ports {
     id: "port2"
-    name: "10.36.78.183/2"  # Change this to the ixia-c-hw port location.
+    name: "ares1-us19370015.lbj.is.keysight.com/3.4"  # Change this to the ixia-c-hw port location.
   }
 }

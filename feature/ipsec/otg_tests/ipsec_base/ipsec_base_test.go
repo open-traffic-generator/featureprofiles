@@ -3,6 +3,7 @@ package ipsec_base_test
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,12 +80,13 @@ const (
 	flowIPv6 = "Flow-IPv6"
 
 	// Traffic generation parameters.
-	trafficPPS   = 100
-	trafficPkts  = 1000
+	trafficPPS  = 100
+	trafficPkts = 1000
 
 	// Timeout durations.
-	lagUpTimeout    = 2 * time.Minute
-	trafficWaitTime = 30 * time.Second
+	lagUpTimeout          = 2 * time.Minute
+	trafficStartWaitTime  = 30 * time.Second
+	counterSettleWaitTime = 30 * time.Second
 )
 
 type SizeWeightPair struct {
@@ -279,6 +281,7 @@ func assignAggregateToVRF(t *testing.T, dut *ondatra.DUTDevice, lagName string, 
 	vrfConfig := fmt.Sprintf(`interface %s
    vrf %s
 !`, intfName, vrfName)
+	t.Logf("Applying CLI VRF assignment on %s into VRF %s", intfName, vrfName)
 	helpers.GnmiCLIConfig(t, dut, vrfConfig)
 }
 
@@ -362,20 +365,35 @@ func configureLAGInterface(t *testing.T, dut *ondatra.DUTDevice, lagName string,
 	}
 }
 
-func createVRF(t *testing.T, dut *ondatra.DUTDevice, vrfName string) {
+// createVRFs creates multiple VRFs with a single CLI push to reduce gNMI Set calls.
+func createVRFs(t *testing.T, dut *ondatra.DUTDevice, vrfNames []string) {
 	t.Helper()
-	if vrfName == "" {
+
+	if len(vrfNames) == 0 {
 		return
 	}
 
-	// Create VRF using CLI commands to ensure it exists before OpenConfig tries to configure it
-	vrfConfig := fmt.Sprintf(`vrf instance %s
+	var b strings.Builder
+	for _, vrfName := range vrfNames {
+		if vrfName == "" {
+			continue
+		}
+		b.WriteString(fmt.Sprintf(`vrf instance %s
 !
 ip routing vrf %s
 !
 ipv6 unicast-routing vrf %s
-!`, vrfName, vrfName, vrfName)
-	helpers.GnmiCLIConfig(t, dut, vrfConfig)
+!
+`, vrfName, vrfName, vrfName))
+	}
+
+	cli := b.String()
+	if cli == "" {
+		return
+	}
+
+	t.Logf("Applying CLI VRF creation/routing config for %d VRF(s): %v", len(vrfNames), vrfNames)
+	helpers.GnmiCLIConfig(t, dut, cli)
 }
 
 // configureMACsec configures a MACsec security profile and applies it to the given interface
@@ -393,6 +411,7 @@ func configureMACsec(t *testing.T, dut *ondatra.DUTDevice, intfName string) {
    interface %s
    mac security profile sampleProfile
 !`, intfName)
+	t.Logf("Applying CLI MACsec profile on interface %s", intfName)
 	helpers.GnmiCLIConfig(t, dut, macSecCLI)
 }
 
@@ -450,6 +469,7 @@ interface %s
    tunnel path-mtu-discovery
    tunnel ipsec profile IPSEC_PROFILE_1
 !`, cfg.LocalFQDN, cfg.RemoteFQDN, cfg.TunnelName, cfg.Description, cfg.TunnelVRF, addrLines, cfg.TunnelSrc, cfg.TunnelDst)
+	t.Logf("Applying CLI IPSec tunnel config on %s in VRF %s (src=%s dst=%s)", cfg.TunnelName, cfg.TunnelVRF, cfg.TunnelSrc, cfg.TunnelDst)
 	helpers.GnmiCLIConfig(t, dut, tunnelCLI)
 }
 
@@ -495,6 +515,7 @@ func configureStaticRoutes(t *testing.T, dut *ondatra.DUTDevice, routes []static
 	}
 
 	// Configure via CLI: routes with egress-vrf, or routes in the default VRF.
+	var cliRoutes []string
 	for _, r := range routes {
 		if r.EgressVRF == "" && r.VRF != "" {
 			continue // already handled via OC above
@@ -519,7 +540,14 @@ func configureStaticRoutes(t *testing.T, dut *ondatra.DUTDevice, routes []static
 			cli = fmt.Sprintf("%s route %s egress-vrf %s %s",
 				ipType, r.Prefix, r.EgressVRF, r.NextHop)
 		}
-		helpers.GnmiCLIConfig(t, dut, cli)
+		t.Logf("CLI static route: %s", cli)
+		cliRoutes = append(cliRoutes, cli)
+	}
+
+	if len(cliRoutes) > 0 {
+		cliSumm := strings.Join(cliRoutes, "\n")
+		t.Logf("Applying %d CLI static route command(s) in one gNMI Set", len(cliRoutes))
+		helpers.GnmiCLIConfig(t, dut, cliSumm)
 	}
 }
 
@@ -960,10 +988,8 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 	dut2PortAttrs := []attrs.Attributes{dut2Lag1Config, dut2Lag2Config}
 
 	// Create all VRFs upfront before configuring interfaces.
-	createVRF(t, dut1, ateVRF)
-	createVRF(t, dut1, tunnelVRF)
-	createVRF(t, dut2, ateVRF)
-	createVRF(t, dut2, tunnelVRF)
+	createVRFs(t, dut1, []string{ateVRF, tunnelVRF})
+	createVRFs(t, dut2, []string{ateVRF, tunnelVRF})
 
 	// Configure DUTs: generate one aggregate per port group inside configureDUT.
 	// dut1Ports and dut2Ports are the LAGs in TUNNEL_VRF for DUT-to-DUT communication.
@@ -1043,7 +1069,7 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 		otg.StartTraffic(t)
 
 		// Wait for traffic to flow and stabilize.
-		time.Sleep(trafficWaitTime)
+		time.Sleep(trafficStartWaitTime)
 
 		otg.StopTraffic(t)
 
@@ -1051,7 +1077,7 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 		stopCapture(t, ate)
 
 		// Wait for counters to stabilize after traffic stops.
-		time.Sleep(trafficWaitTime)
+		time.Sleep(counterSettleWaitTime)
 		otgutils.LogFlowMetrics(t, otg, top)
 
 		verifyTraffic(t, ate, flowIPv4, true)

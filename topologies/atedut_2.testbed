@@ -1,15 +1,44 @@
 # proto-file: github.com/openconfig/ondatra/blob/main/proto/testbed.proto
 # proto-message: ondatra.Testbed
 
-# This testbed provides a DUT and ATE with 2 links between them.
+# This testbed provides 2 DUTs and ATE connected serially. 
+# This is used for control plane testing, not traffic testing.
 
 duts {
-  id: "dut"
+  id: "dut1"
   ports {
     id: "port1"
   }
   ports {
     id: "port2"
+  }
+  ports {
+    id: "port3"
+  }
+  ports {
+    id: "port4"
+  }
+  ports {
+    id: "port5"
+  }
+}
+
+duts {
+  id: "dut2"
+  ports {
+    id: "port1"
+  }
+  ports {
+    id: "port2"
+  }
+  ports {
+    id: "port3"
+  }
+  ports {
+    id: "port4"
+  }
+  ports {
+    id: "port5"
   }
 }
 
@@ -24,11 +53,31 @@ ates {
 }
 
 links {
-  a: "dut:port1"
+  a: "dut1:port5"
   b: "ate:port1"
 }
 
 links {
-  a: "dut:port2"
+  a: "dut1:port1"
+  b: "dut2:port1"
+}
+
+links {
+  a: "dut1:port2"
+  b: "dut2:port2"
+}
+
+links {
+  a: "dut1:port3"
+  b: "dut2:port3"
+}
+
+links {
+  a: "dut1:port4"
+  b: "dut2:port4"
+}
+
+links {
+  a: "dut2:port5"
   b: "ate:port2"
 }
