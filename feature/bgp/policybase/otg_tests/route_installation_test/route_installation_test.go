@@ -642,6 +642,7 @@ func TestEstablish(t *testing.T) {
 
 	// Starting ATE Traffic and verify Traffic Flows and packet loss.
 	sendTraffic(t, otg, otgConfig)
+	otgutils.WaitForTxPacketsReceived(t, otgutils.TrafficTestParams{Config: otgConfig, Ate: ate})
 	verifyTraffic(t, ate, otgConfig, false)
 	verifyPrefixesTelemetry(t, dut, routeCount, routeCount, 0)
 	verifyPrefixesTelemetryV6(t, dut, routeCount, routeCount, 0)
@@ -743,6 +744,9 @@ func TestBGPPolicy(t *testing.T) {
 
 			// Send and verify traffic.
 			sendTraffic(t, otg, otgConfig)
+			if !tc.wantLoss {
+				otgutils.WaitForTxPacketsReceived(t, otgutils.TrafficTestParams{Config: otgConfig, Ate: ate})
+			}
 			verifyTraffic(t, ate, otgConfig, tc.wantLoss)
 
 			// Verify traffic and telemetry.
