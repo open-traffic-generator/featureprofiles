@@ -2,22 +2,23 @@ package ipsec_base_test
 
 import (
 	"fmt"
-	"os"
+	"math"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
 	"github.com/open-traffic-generator/snappi/gosnappi"
 	otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
+	"github.com/openconfig/ondatra/otg"
 	"github.com/openconfig/ygnmi/ygnmi"
 	"github.com/openconfig/ygot/ygot"
 
 	"github.com/openconfig/featureprofiles/internal/attrs"
+	"github.com/openconfig/featureprofiles/internal/cfgplugins"
 	"github.com/openconfig/featureprofiles/internal/deviations"
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/helpers"
+	packetvalidationhelpers "github.com/openconfig/featureprofiles/internal/otg_helpers/packetvalidationhelpers"
 	"github.com/openconfig/featureprofiles/internal/otgutils"
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
@@ -39,37 +40,60 @@ const (
 	tunnelVRF = "TUNNEL_VRF"
 
 	// Interface names.
-	tunnelIfName   = "Tunnel1"
-	loopbackIfName = "Loopback0"
+	tunnelIfName    = "Tunnel1"
+	tunnel2IfName   = "Tunnel2"
+	loopbackIfName  = "Loopback0"
+	loopback2IfName = "Loopback1"
 
 	// IKE FQDN identities.
 	dut1FQDN = "dut1.test.local"
 	dut2FQDN = "dut2.test.local"
 
-	// Loopback IPv6 addresses used as IPSec tunnel endpoints.
-	dut1LoopbackIPv6  = "2003:db8:1::1"
-	dut2LoopbackIPv6  = "2003:db8:2::1"
+	// Distinct IKE FQDN identities for the second tunnel pair so that its IKE
+	// negotiation is fully independent from the first tunnel. Sharing the same
+	// remote-id FQDN across tunnels causes Arista to treat them as a single IKE
+	// peer, so a key/cipher change on Tunnel2 would also tear down Tunnel1.
+	dut1FQDN2 = "dut1-t2.test.local"
+	dut2FQDN2 = "dut2-t2.test.local"
+
+	// Loopback IPv6 addresses used as IPSec tunnel endpoints (RFC 3849).
+	dut1LoopbackIPv6  = "2001:db8:3::1"
+	dut2LoopbackIPv6  = "2001:db8:4::1"
+	dut1Loopback2IPv6 = "2001:db8:5::1"
+	dut2Loopback2IPv6 = "2001:db8:6::1"
 	loopbackPrefixLen = 128
 
-	// Tunnel interface addresses in CIDR notation.
-	dut1TunnelIPv4CIDR = "10.0.1.1/30"
-	dut2TunnelIPv4CIDR = "10.0.1.2/30"
-	dut1TunnelIPv6CIDR = "2001:db8:100:1::1/64"
-	dut2TunnelIPv6CIDR = "2001:db8:100:1::2/64"
+	// Tunnel interface addresses in CIDR notation (RFC 5737 / RFC 3849).
+	dut1TunnelIPv4CIDR  = "192.0.2.5/30"
+	dut2TunnelIPv4CIDR  = "192.0.2.6/30"
+	dut1TunnelIPv6CIDR  = "2001:db8:100:1::1/64"
+	dut2TunnelIPv6CIDR  = "2001:db8:100:1::2/64"
+	dut1Tunnel2IPv4CIDR = "198.51.100.1/30"
+	dut2Tunnel2IPv4CIDR = "198.51.100.2/30"
+	dut1Tunnel2IPv6CIDR = "2001:db8:100:2::1/64"
+	dut2Tunnel2IPv6CIDR = "2001:db8:100:2::2/64"
 
 	// Tunnel next-hop addresses used in static routes (no prefix length).
-	dut1TunnelIPv4NH = "10.0.1.1"
-	dut2TunnelIPv4NH = "10.0.1.2"
+	dut1TunnelIPv4NH = "192.0.2.5"
+	dut2TunnelIPv4NH = "192.0.2.6"
 	dut1TunnelIPv6NH = "2001:db8:100:1::1"
 	dut2TunnelIPv6NH = "2001:db8:100:1::2"
 
+	// Second tunnel next-hop addresses used for ECMP across both tunnels.
+	dut1Tunnel2IPv4NH = "198.51.100.1"
+	dut2Tunnel2IPv4NH = "198.51.100.2"
+	dut1Tunnel2IPv6NH = "2001:db8:100:2::1"
+	dut2Tunnel2IPv6NH = "2001:db8:100:2::2"
+
 	// Static route destination prefixes.
-	ate1IPv4Prefix  = "192.0.2.0/30"
-	ate2IPv4Prefix  = "203.0.113.0/30"
-	ate1IPv6Prefix  = "2001:db8:1::0/126"
-	ate2IPv6Prefix  = "2001:db8:2::0/126"
-	dut1LoopbackPfx = "2003:db8:1::1/128"
-	dut2LoopbackPfx = "2003:db8:2::1/128"
+	ate1IPv4Prefix   = "192.0.2.0/30"
+	ate2IPv4Prefix   = "203.0.113.0/30"
+	ate1IPv6Prefix   = "2001:db8:1::0/126"
+	ate2IPv6Prefix   = "2001:db8:2::0/126"
+	dut1LoopbackPfx  = "2001:db8:3::1/128"
+	dut2LoopbackPfx  = "2001:db8:4::1/128"
+	dut1Loopback2Pfx = "2001:db8:5::1/128"
+	dut2Loopback2Pfx = "2001:db8:6::1/128"
 
 	// OTG MACsec peer name.
 	macsecPeerName = "Peer A"
@@ -81,8 +105,8 @@ const (
 	flowIPv6Bwd = "Flow-IPv6-2"
 
 	// Traffic generation parameters.
-	trafficPPS   = 100
-	trafficPkts  = 1000
+	trafficPPS  = 100
+	trafficPkts = 1000
 
 	// Timeout durations.
 	lagUpTimeout    = 2 * time.Minute
@@ -90,14 +114,27 @@ const (
 )
 
 type SizeWeightPair struct {
-    Size   uint32
-    Weight float32
+	Size   uint32
+	Weight float32
 }
 
 var (
 	// MKA keys.
-	cak = "1234abcd1234abcd1234abcd1234abcd"
-	ckn = "12345678123456781234567812345678"
+	cak         = "1234abcd1234abcd1234abcd1234abcd"
+	ckn         = "12345678123456781234567812345678"
+	fallbackCak = "1234abcd1234abcd1234abcd1234abce"
+	fallbackCkn = "12345678123456781234567812345679"
+
+	// DUT port groupings (reference: mpls_gre_ipv4_encap_test.go).
+	// custPorts are the DUT customer/ATE-facing ports (MACsec edge).
+	custPorts = []string{"port5"}
+	// corePorts are the DUT-to-DUT core transport ports, grouped per LAG.
+	corePorts = [][]string{
+		{"port1", "port2"},
+		{"port3", "port4"},
+	}
+	// ateCustPorts are the ATE OTG customer ports.
+	ateCustPorts = []string{"port1", "port2"}
 
 	// ATE LAG configurations (RFC 5737 test networks).
 	ate1LagConfig = attrs.Attributes{
@@ -119,10 +156,10 @@ var (
 		MTU:     1500,
 	}
 
-	// DUT LAG3 configurations (RFC 5737 test networks) - ATE-facing interfaces
+	// DUT customer-facing (ATE-facing) interface configurations (RFC 5737 test networks).
 	// DUT1: VLAN 10 with MACsec
-	dut1Lag3Config = attrs.Attributes{
-		Desc:    "DUT LAG3 configuration",
+	dut1CustIntf = attrs.Attributes{
+		Desc:    "DUT1 customer interface configuration",
 		IPv4:    "192.0.2.1",
 		IPv4Len: 30,
 		IPv6:    "2001:db8:1::1",
@@ -132,8 +169,8 @@ var (
 		ID:      10,
 	}
 	// DUT2: No VLAN
-	dut2Lag3Config = attrs.Attributes{
-		Desc:    "DUT LAG3 configuration",
+	dut2CustIntf = attrs.Attributes{
+		Desc:    "DUT2 customer interface configuration",
 		IPv4:    "203.0.113.1",
 		IPv4Len: 30,
 		IPv6:    "2001:db8:2::1",
@@ -143,30 +180,30 @@ var (
 		ID:      0,
 	}
 
-	// DUT LAG configurations (IPv6-only for DUT-to-DUT links per RFC 5737 test networks)
-	dut1Lag1Config = attrs.Attributes{
-		Desc:    "DUT1 LAG1 configuration",
+	// DUT core interface configurations (IPv6-only for DUT-to-DUT links per RFC 5737 test networks)
+	dut1CoreIntf1 = attrs.Attributes{
+		Desc:    "DUT1 core interface 1 configuration",
 		IPv6:    "2001:db8:200:1::1",
 		IPv6Len: 126,
 		MAC:     "02:00:10:01:01:01",
 		MTU:     9216,
 	}
-	dut1Lag2Config = attrs.Attributes{
-		Desc:    "DUT1 LAG2 configuration",
+	dut1CoreIntf2 = attrs.Attributes{
+		Desc:    "DUT1 core interface 2 configuration",
 		IPv6:    "2001:db8:200:2::1",
 		IPv6Len: 126,
 		MAC:     "02:00:10:02:01:01",
 		MTU:     9216,
 	}
-	dut2Lag1Config = attrs.Attributes{
-		Desc:    "DUT2 LAG1 configuration",
+	dut2CoreIntf1 = attrs.Attributes{
+		Desc:    "DUT2 core interface 1 configuration",
 		IPv6:    "2001:db8:200:1::2",
 		IPv6Len: 126,
 		MAC:     "02:00:20:01:01:01",
 		MTU:     9216,
 	}
-	dut2Lag2Config = attrs.Attributes{
-		Desc:    "DUT2 LAG2 configuration",
+	dut2CoreIntf2 = attrs.Attributes{
+		Desc:    "DUT2 core interface 2 configuration",
 		IPv6:    "2001:db8:200:2::2",
 		IPv6Len: 126,
 		MAC:     "02:00:20:02:01:01",
@@ -186,6 +223,50 @@ var (
 		{Size: 1500, Weight: 10},
 		{Size: 4500, Weight: 10},
 		{Size: 9088, Weight: 10},
+	}
+)
+
+// Packet capture validation definitions, modelled on
+// feature/policy_forwarding/otg_tests/mpls_gre_ipv4_encap_test/mpls_gre_ipv4_encap_test.go.
+var (
+	// MacsecValidations lists the validations performed on the customer-facing
+	// capture to confirm traffic is MACsec-encrypted.
+	MacsecValidations = []packetvalidationhelpers.ValidationType{
+		packetvalidationhelpers.ValidateMacsecHeader,
+	}
+	// MacsecPacketValidation validates MACsec-encrypted packets on port1.
+	MacsecPacketValidation = &packetvalidationhelpers.PacketValidation{
+		PortName:    "port1",
+		CaptureName: "macsec-capture",
+		MacsecLayer: &packetvalidationhelpers.MacsecLayer{EtherType: 0x88E5},
+		Validations: MacsecValidations,
+	}
+
+	// DSCPValidations lists the validations performed to confirm IPv4 DSCP
+	// preservation on the egress customer port.
+	DSCPValidations = []packetvalidationhelpers.ValidationType{
+		packetvalidationhelpers.ValidateIPv4Header,
+	}
+	// DSCPPacketValidation validates the IPv4 DSCP (TOS) value on port2.
+	DSCPPacketValidation = &packetvalidationhelpers.PacketValidation{
+		PortName:    "port2",
+		CaptureName: "dscp-capture",
+		IPv4Layer:   &packetvalidationhelpers.IPv4Layer{SkipProtocolCheck: true},
+		Validations: DSCPValidations,
+	}
+
+	// FlowLabelValidations lists the validations performed to confirm IPv6
+	// flow-label preservation on the egress customer port.
+	FlowLabelValidations = []packetvalidationhelpers.ValidationType{
+		packetvalidationhelpers.ValidateIPv6Header,
+	}
+	// FlowLabelPacketValidation validates the IPv6 flow label on port2.
+	FlowLabelPacketValidation = &packetvalidationhelpers.PacketValidation{
+		PortName:    "port2",
+		CaptureName: "flowlabel-capture",
+		IPv6Layer:   &packetvalidationhelpers.IPv6Layer{},
+		Flags:       &packetvalidationhelpers.ValidationFlags{ValidateFlowLabel: true},
+		Validations: FlowLabelValidations,
 	}
 )
 
@@ -364,95 +445,35 @@ func configureLAGInterface(t *testing.T, dut *ondatra.DUTDevice, lagName string,
 	}
 }
 
-func createVRF(t *testing.T, dut *ondatra.DUTDevice, vrfName string) {
+// createVRFs creates multiple VRFs with a single CLI push to reduce gNMI Set calls.
+func createVRFs(t *testing.T, dut *ondatra.DUTDevice, vrfNames []string) {
 	t.Helper()
-	if vrfName == "" {
+
+	if len(vrfNames) == 0 {
 		return
 	}
 
-	// Create VRF using CLI commands to ensure it exists before OpenConfig tries to configure it
-	vrfConfig := fmt.Sprintf(`vrf instance %s
+	var b strings.Builder
+	for _, vrfName := range vrfNames {
+		if vrfName == "" {
+			continue
+		}
+		b.WriteString(fmt.Sprintf(`vrf instance %s
 !
 ip routing vrf %s
 !
 ipv6 unicast-routing vrf %s
-!`, vrfName, vrfName, vrfName)
-	helpers.GnmiCLIConfig(t, dut, vrfConfig)
-}
-
-// configureMACsec configures a MACsec security profile and applies it to the given interface
-// via CLI. MACsec key management and profile binding have no standard OC equivalent.
-func configureMACsec(t *testing.T, dut *ondatra.DUTDevice, intfName string) {
-	t.Helper()
-	macSecCLI := fmt.Sprintf(`mac security
-   profile sampleProfile
-      key 12345678123456781234567812345678 7 075E731F1A081B061343595F502B29272C6267714706140005070B0B07550C001C
-      key 12345678123456781234567812345679 7 06575D72184F0B1A014640585805282820796166761205150750040A0C52560D06 fallback
-      mka key-server priority 10
-      mka session rekey-period 3600
-      sci
-   !
-   interface %s
-   mac security profile sampleProfile
-!`, intfName)
-	helpers.GnmiCLIConfig(t, dut, macSecCLI)
-}
-
-// IPSecTunnelCfg holds parameters for configuring an IPSec tunnel interface.
-type IPSecTunnelCfg struct {
-	TunnelName  string // e.g., "Tunnel1"
-	Description string // tunnel interface description
-	LocalFQDN   string // IKE local-id FQDN
-	RemoteFQDN  string // IKE remote-id FQDN
-	TunnelIPv4  string // CIDR, e.g., "10.0.1.1/30"
-	TunnelIPv6  string // CIDR, e.g., "2001:db8:100:1::1/64"
-	TunnelSrc   string // tunnel source address
-	TunnelDst   string // tunnel destination address
-	TunnelVRF   string // VRF the tunnel interface belongs to
-}
-
-// configureIPSecTunnel configures IPSec IKE/SA policies and a tunnel interface entirely
-// via CLI. Arista does not accept OC configuration for tunnel interfaces (including IP
-// address assignment), so all tunnel attributes are pushed through gNMI CLI.
-func configureIPSecTunnel(t *testing.T, dut *ondatra.DUTDevice, cfg IPSecTunnelCfg) {
-	t.Helper()
-
-	// Build optional ip/ipv6 address lines for the tunnel interface.
-	var addrLines string
-	if cfg.TunnelIPv4 != "" {
-		addrLines += fmt.Sprintf("   ip address %s\n", cfg.TunnelIPv4)
-	}
-	if cfg.TunnelIPv6 != "" {
-		addrLines += fmt.Sprintf("   ipv6 address %s\n", cfg.TunnelIPv6)
-	}
-
-	tunnelCLI := fmt.Sprintf(`ip security
-   ike policy IKE_POLICY_1
-      dh-group 24
-      local-id fqdn %s
-      remote-id fqdn %s
-   !
-   sa policy SA_POLICY_1
-      esp encryption aes256gcm128
-      pfs dh-group 14
-   !
-   profile IPSEC_PROFILE_1
-      ike-policy IKE_POLICY_1
-      sa-policy SA_POLICY_1
-      connection start
-      shared-key 7 047F0E021A70
 !
-interface %s
-   description %s
-   mtu 9216
-   vrf %s
-%s   tunnel mode ipsec
-   tunnel source %s
-   tunnel destination %s
-   tunnel path-mtu-discovery
-   tunnel ipsec profile IPSEC_PROFILE_1
-!`, cfg.LocalFQDN, cfg.RemoteFQDN, cfg.TunnelName, cfg.Description, cfg.TunnelVRF, addrLines, cfg.TunnelSrc, cfg.TunnelDst)
-	helpers.GnmiCLIConfig(t, dut, tunnelCLI)
+`, vrfName, vrfName, vrfName))
+	}
+
+	cli := b.String()
+	if cli == "" {
+		return
+	}
+
+	t.Logf("Applying CLI VRF creation/routing config for %d VRF(s): %v", len(vrfNames), vrfNames)
+	helpers.GnmiCLIConfig(t, dut, cli)
 }
 
 // staticRoute represents a single static route entry.
@@ -589,8 +610,8 @@ func configureATE(t *testing.T) gosnappi.Config {
 	// Port mapping expected from testbed:
 	// - ATE port1 <-> DUT1 port5 (with MACSec on DUT side)
 	// - ATE port2 <-> DUT2 port5
-	p1 := top.Ports().Add().SetName("port1")
-	p2 := top.Ports().Add().SetName("port2")
+	p1 := top.Ports().Add().SetName(ateCustPorts[0])
+	p2 := top.Ports().Add().SetName(ateCustPorts[1])
 
 	// add lags
 	l1 := top.Lags().Add().SetName(ate1LagName)
@@ -646,14 +667,14 @@ func configureATE(t *testing.T) gosnappi.Config {
 		Add().
 		SetName("p1d1ipv4").
 		SetAddress(ate1LagConfig.IPv4).
-		SetGateway(dut1Lag3Config.IPv4).
+		SetGateway(dut1CustIntf.IPv4).
 		SetPrefix(uint32(ate1LagConfig.IPv4Len))
 
 	d1ipv6 := d1Eth1.Ipv6Addresses().
 		Add().
 		SetName("p1d1ipv6").
 		SetAddress(ate1LagConfig.IPv6).
-		SetGateway(dut1Lag3Config.IPv6).
+		SetGateway(dut1CustIntf.IPv6).
 		SetPrefix(uint32(ate1LagConfig.IPv6Len))
 
 	l2 := top.Lags().Add().SetName(ate2LagName)
@@ -681,15 +702,14 @@ func configureATE(t *testing.T) gosnappi.Config {
 		Add().
 		SetName("p2d2ipv4").
 		SetAddress(ate2LagConfig.IPv4).
-		SetGateway(dut2Lag3Config.IPv4).
+		SetGateway(dut2CustIntf.IPv4).
 		SetPrefix(uint32(ate2LagConfig.IPv4Len))
-
 
 	d2ipv6 := d2Eth1.Ipv6Addresses().
 		Add().
 		SetName("p2d2ipv6").
 		SetAddress(ate2LagConfig.IPv6).
-		SetGateway(dut2Lag3Config.IPv6).
+		SetGateway(dut2CustIntf.IPv6).
 		SetPrefix(uint32(ate2LagConfig.IPv6Len))
 
 	flow := top.Flows().Add().SetName(flowIPv4Fwd)
@@ -700,7 +720,10 @@ func configureATE(t *testing.T) gosnappi.Config {
 	}
 
 	flow.Rate().SetPps(trafficPPS)
-	flow.Duration().FixedPackets().SetPackets(trafficPkts)
+	// Continuous duration is required because this flow increments the source
+	// address; a fixed packet count combined with the size-weight profile and the
+	// address increment would create empty sub-streams that the controller rejects.
+	flow.Duration().Continuous()
 	flow.Metrics().SetEnable(true)
 
 	e1 := flow.Packet().Add().Ethernet()
@@ -712,7 +735,9 @@ func configureATE(t *testing.T) gosnappi.Config {
 	vlan.Id().SetValue(vlanID)
 
 	v4 := flow.Packet().Add().Ipv4()
-	v4.Src().SetValue(ate1LagConfig.IPv4)
+	// Increment the source address to generate flow entropy so that ECMP hashing
+	// spreads the customer traffic across the DUT-to-DUT member links.
+	v4.Src().Increment().SetStart(ate1LagConfig.IPv4).SetStep("0.0.0.1").SetCount(1000)
 	v4.Dst().SetValue(ate2LagConfig.IPv4)
 
 	flowBwd := top.Flows().Add().SetName(flowIPv4Bwd)
@@ -729,6 +754,7 @@ func configureATE(t *testing.T) gosnappi.Config {
 	e2.Src().SetValue(ate2LagConfig.MAC)
 
 	v4Bwd := flowBwd.Packet().Add().Ipv4()
+	// TODO: Change Random Source Values to generate multiple flows
 	v4Bwd.Src().SetValue(ate2LagConfig.IPv4)
 	v4Bwd.Dst().SetValue(ate1LagConfig.IPv4)
 
@@ -740,7 +766,10 @@ func configureATE(t *testing.T) gosnappi.Config {
 		flowV6.Size().WeightPairs().Custom().Add().SetSize(sizeWeight.Size).SetWeight(sizeWeight.Weight)
 	}
 	flowV6.Rate().SetPps(trafficPPS)
-	flowV6.Duration().FixedPackets().SetPackets(trafficPkts)
+	// Continuous duration is required because this flow increments the source
+	// address; a fixed packet count combined with the size-weight profile and the
+	// address increment would create empty sub-streams that the controller rejects.
+	flowV6.Duration().Continuous()
 	flowV6.Metrics().SetEnable(true)
 
 	e3 := flowV6.Packet().Add().Ethernet()
@@ -752,7 +781,9 @@ func configureATE(t *testing.T) gosnappi.Config {
 	vlan3.Id().SetValue(vlanID)
 
 	v6 := flowV6.Packet().Add().Ipv6()
-	v6.Src().SetValue(ate1LagConfig.IPv6)
+	// Increment the source address to generate flow entropy so that ECMP hashing
+	// spreads the customer traffic across the DUT-to-DUT member links.
+	v6.Src().Increment().SetStart(ate1LagConfig.IPv6).SetStep("::1").SetCount(1000)
 	v6.Dst().SetValue(ate2LagConfig.IPv6)
 
 	// IPv6 Flow from port2 to port1.
@@ -770,37 +801,76 @@ func configureATE(t *testing.T) gosnappi.Config {
 	e4.Src().SetValue(ate2LagConfig.MAC)
 
 	v6Bwd := flowV6Bwd.Packet().Add().Ipv6()
+	// TODO: Change Random Source Values to generate multiple flows
 	v6Bwd.Src().SetValue(ate2LagConfig.IPv6)
 	v6Bwd.Dst().SetValue(ate1LagConfig.IPv6)
 
 	return top
 }
 
-func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, flowName string, testResults bool) {
+func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, cfg gosnappi.Config, flowName string, testResults bool) {
 	t.Helper()
 
-	recvMetric := gnmi.Get(t, ate.OTG(), gnmi.OTG().Flow(flowName).State())
-	framesTx := recvMetric.GetCounters().GetOutPkts()
-	framesRx := recvMetric.GetCounters().GetInPkts()
+	flowPath := gnmi.OTG().Flow(flowName).State()
+	watchTimeout := 2 * time.Minute
 
-	if framesTx == 0 {
-		t.Errorf("%s: no traffic transmitted, FramesTx: got %d, want > 0", flowName, framesTx)
+	watch := gnmi.Watch(t, ate.OTG(), flowPath, watchTimeout, func(val *ygnmi.Value[*otgtelemetry.Flow]) bool {
+		metric, ok := val.Val()
+		if !ok || metric == nil {
+			return false
+		}
+
+		framesTx := metric.GetCounters().GetOutPkts()
+		framesRx := metric.GetCounters().GetInPkts()
+		if framesTx == 0 {
+			return false
+		}
+
+		if testResults {
+			// Expect frames to be received.
+			return framesRx == framesTx
+		}
+
+		// Expect no frames to be received.
+		return framesRx == 0
+	})
+
+	last, ok := watch.Await(t)
+	if !ok {
+		recvMetric := gnmi.Get(t, ate.OTG(), flowPath)
+		framesTx := recvMetric.GetCounters().GetOutPkts()
+		framesRx := recvMetric.GetCounters().GetInPkts()
+
+		// If the final snapshot already matches expectations, treat as pass.
+		if testResults {
+			if framesTx > 0 && framesRx == framesTx {
+				t.Logf("%s: traffic verification passed from final snapshot after watch timeout: FramesTx: %d, FramesRx: %d", flowName, framesTx, framesRx)
+				return
+			}
+		} else {
+			if framesTx > 0 && framesRx == 0 {
+				t.Logf("%s: traffic verification passed from final snapshot after watch timeout: FramesTx: %d, FramesRx: %d", flowName, framesTx, framesRx)
+				return
+			}
+		}
+
+		if testResults {
+			t.Errorf("%s: traffic verification did not pass within %v: FramesTx: %d, FramesRx: %d, want FramesRx == FramesTx and FramesTx > 0", flowName, watchTimeout, framesTx, framesRx)
+		} else {
+			t.Errorf("%s: traffic verification did not pass within %v: FramesTx: %d, FramesRx: %d, want FramesRx == 0 and FramesTx > 0", flowName, watchTimeout, framesTx, framesRx)
+		}
+		otgutils.LogFlowMetrics(t, ate.OTG(), cfg)
 		return
 	}
 
-	if testResults {
-		// Expect frames to be received
-		if framesRx != framesTx {
-			t.Errorf("%s: frame loss detected: FramesTx: %d, FramesRx: %d, want FramesRx == FramesTx", flowName, framesTx, framesRx)
-		}
-	} else {
-		// Expect no frames to be received
-		if framesRx != 0 {
-			t.Errorf("%s: unexpected frames received: FramesTx: %d, FramesRx: %d, want FramesRx == 0", flowName, framesTx, framesRx)
-		}
+	recvMetric, present := last.Val()
+	if !present || recvMetric == nil {
+		recvMetric = gnmi.Get(t, ate.OTG(), flowPath)
 	}
-
-	t.Logf("%s: FramesTx: %d, FramesRx: %d", flowName, framesTx, framesRx)
+	framesTx := recvMetric.GetCounters().GetOutPkts()
+	framesRx := recvMetric.GetCounters().GetInPkts()
+	otgutils.LogFlowMetrics(t, ate.OTG(), cfg)
+	t.Logf("%s: traffic verification passed within %v: FramesTx: %d, FramesRx: %d", flowName, watchTimeout, framesTx, framesRx)
 }
 
 func waitForOTGLAGUP(t *testing.T, ate *ondatra.ATEDevice, lagName string, wantMembersUp uint64, timeout time.Duration) {
@@ -874,159 +944,10 @@ func waitForOTGMACSecUp(t *testing.T, ate *ondatra.ATEDevice, ifName string, tim
 	}
 }
 
-// enableCapture enables packet capture on specified OTG ports by adding to topology
-func enableCapture(t *testing.T, topo gosnappi.Config, otgPortNames []string) gosnappi.Config {
-	t.Helper()
-	cap := topo.Captures().Add().SetName("capture").SetPortNames(otgPortNames).SetFormat(gosnappi.CaptureFormat.PCAP)
-	filter := cap.Filters().Add()
-	filter.Ethernet().EtherType().SetValue("0x88E5") // Capture only MACsec-encrypted packets (EtherType 0x88E5)
-	return topo
-}
-
-// startCapture starts packet capture on OTG ports using control state
-func startCapture(t *testing.T, ate *ondatra.ATEDevice) {
-	t.Helper()
-	otg := ate.OTG()
-	cs := gosnappi.NewControlState()
-	cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.START)
-	otg.SetControlState(t, cs)
-}
-
-// stopCapture stops packet capture on OTG ports using control state
-func stopCapture(t *testing.T, ate *ondatra.ATEDevice) {
-	t.Helper()
-	otg := ate.OTG()
-	cs := gosnappi.NewControlState()
-	cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.STOP)
-	otg.SetControlState(t, cs)
-}
-
-// verifyCapturedMACSecPackets validates captured packets contain MACsec encryption.
-// MACsec-encrypted packets are identified by the MACsec EtherType (0x88E5).
-// This function should be called after GetCapture() retrieves the packet bytes.
-func verifyCapturedMACSecPackets(t *testing.T, packetBytes []byte, portName string) {
+func configureBaseSingleTunnel(t *testing.T, dut1, dut2 *ondatra.DUTDevice) {
 	t.Helper()
 
-	t.Logf("=== MACsec PACKET CAPTURE VALIDATION START for port %s ===", portName)
-
-	if len(packetBytes) == 0 {
-		t.Errorf("MACsec packet capture on port %s: no packets captured, want at least 1 MACsec-encrypted packet", portName)
-		return
-	}
-
-	// Write capture to temporary pcap file for analysis
-	f, err := os.CreateTemp("", ".pcap")
-	if err != nil {
-		t.Fatalf("Could not create temporary pcap file: %v", err)
-	}
-	if _, err := f.Write(packetBytes); err != nil {
-		f.Close()
-		t.Fatalf("Could not write packetBytes to pcap file: %v", err)
-	}
-	f.Close()
-	defer os.Remove(f.Name())
-
-	handle, err := pcap.OpenOffline(f.Name())
-	if err != nil {
-		t.Fatalf("Could not open pcap file: %v", err)
-	}
-	defer handle.Close()
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-
-	macsecPacketCount := 0
-	totalPackets := 0
-	const macsecEtherType = 0x88E5
-
-	for packet := range packetSource.Packets() {
-		totalPackets++
-
-		// Get the Ethernet layer
-		ethLayer := packet.Layer(layers.LayerTypeEthernet)
-		if ethLayer == nil {
-			continue
-		}
-
-		eth := ethLayer.(*layers.Ethernet)
-		if eth.EthernetType == layers.EthernetType(macsecEtherType) {
-			macsecPacketCount++
-			// t.Logf("Captured MACsec packet on port %s: packet length=%d bytes, EtherType=0x%04X",
-			// 	portName, len(packet.Data()), uint16(eth.EthernetType))
-		}
-	}
-
-	t.Logf("=== MACsec PACKET CAPTURE VALIDATION SUMMARY ===")
-	t.Logf("Total packets captured: %d", totalPackets)
-	t.Logf("MACsec-encrypted packets found: %d", macsecPacketCount)
-
-	if totalPackets == 0 {
-		t.Errorf("MACsec packet capture on port %s: no packets captured, want at least 1 MACsec-encrypted packet", portName)
-	} else if macsecPacketCount == 0 {
-		t.Errorf("MACsec packet capture on port %s: captured %d total packets but no MACsec-encrypted packets (EtherType 0x%04X) detected",
-			portName, totalPackets, macsecEtherType)
-	} else {
-		t.Logf("MACsec packet capture verification on port %s: successfully captured %d MACsec-encrypted packets out of %d total packets",
-			portName, macsecPacketCount, totalPackets)
-	}
-}
-
-func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
-	dut1 := ondatra.DUT(t, "dut1")
-	dut2 := ondatra.DUT(t, "dut2")
-	ate := ondatra.ATE(t, "ate")
-	otg := ate.OTG()
-
-	// Step: Configure DUT customer-facing interfaces, VLANs, VRFs, MACSec, and DUT-DUT transport aggregates.
-	// Create two LAGs (each with 2 member ports) and apply to both DUTs.
-	// Use per-DUT aggregate IDs from netutil to ensure device-valid agg names.
-	// ATE still uses logical names ate1LagName/ate2LagName.
-
-	// // Use Ondatra Port objects for each DUT.
-	dut1p1 := dut1.Port(t, "port1")
-	dut1p2 := dut1.Port(t, "port2")
-	dut1p3 := dut1.Port(t, "port3")
-	dut1p4 := dut1.Port(t, "port4")
-	dut1p5 := dut1.Port(t, "port5") // port5 on each DUT connects to ATE and has MACSec
-
-	dut2p1 := dut2.Port(t, "port1")
-	dut2p2 := dut2.Port(t, "port2")
-	dut2p3 := dut2.Port(t, "port3")
-	dut2p4 := dut2.Port(t, "port4")
-	dut2p5 := dut2.Port(t, "port5") // port5 on each DUT connects to ATE
-
-	dut1Ports := [][]*ondatra.Port{
-		{dut1p1, dut1p2},
-		{dut1p3, dut1p4},
-	}
-	dut2Ports := [][]*ondatra.Port{
-		{dut2p1, dut2p2},
-		{dut2p3, dut2p4},
-	}
-
-	// DUT-specific attributes: LAGs on each DUT should use DUT attributes
-	dut1PortAttrs := []attrs.Attributes{dut1Lag1Config, dut1Lag2Config}
-	dut2PortAttrs := []attrs.Attributes{dut2Lag1Config, dut2Lag2Config}
-
-	// Create all VRFs upfront before configuring interfaces.
-	createVRF(t, dut1, ateVRF)
-	createVRF(t, dut1, tunnelVRF)
-	createVRF(t, dut2, ateVRF)
-	createVRF(t, dut2, tunnelVRF)
-
-	// Configure DUTs: generate one aggregate per port group inside configureDUT.
-	// dut1Ports and dut2Ports are the LAGs in TUNNEL_VRF for DUT-to-DUT communication.
-	configureDUT(t, dut1, dut1Ports, dut1PortAttrs, "")
-	configureDUT(t, dut1, [][]*ondatra.Port{{dut1p5}}, []attrs.Attributes{dut1Lag3Config}, ateVRF)
-
-	configureDUT(t, dut2, dut2Ports, dut2PortAttrs, "")
-	configureDUT(t, dut2, [][]*ondatra.Port{{dut2p5}}, []attrs.Attributes{dut2Lag3Config}, ateVRF)
-
-	// Configure loopback interfaces used as IPSec tunnel endpoints.
-	configureLoopback(t, dut1, loopbackIfName, dut1LoopbackIPv6, loopbackPrefixLen, true)
-	configureLoopback(t, dut2, loopbackIfName, dut2LoopbackIPv6, loopbackPrefixLen, true)
-
-	configureMACsec(t, dut1, dut1p5.Name())
-
-	configureIPSecTunnel(t, dut1, IPSecTunnelCfg{
+	cfgplugins.ConfigureIPSecTunnel(t, dut1, cfgplugins.IPSecTunnelCfg{
 		TunnelName:  tunnelIfName,
 		Description: "IPsec Tunnel Pair 1 to DUT2",
 		LocalFQDN:   dut1FQDN,
@@ -1038,7 +959,409 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 		TunnelVRF:   tunnelVRF,
 	})
 
-	configureIPSecTunnel(t, dut2, IPSecTunnelCfg{
+	cfgplugins.ConfigureIPSecTunnel(t, dut2, cfgplugins.IPSecTunnelCfg{
+		TunnelName:  tunnelIfName,
+		Description: "IPsec Tunnel Pair 1 to DUT1",
+		LocalFQDN:   dut2FQDN,
+		RemoteFQDN:  dut1FQDN,
+		TunnelIPv4:  dut2TunnelIPv4CIDR,
+		TunnelIPv6:  dut2TunnelIPv6CIDR,
+		TunnelSrc:   dut2LoopbackIPv6,
+		TunnelDst:   dut1LoopbackIPv6,
+		TunnelVRF:   tunnelVRF,
+	})
+}
+
+func configureDualTunnels(t *testing.T, dut1, dut2 *ondatra.DUTDevice) {
+	t.Helper()
+
+	configureBaseSingleTunnel(t, dut1, dut2)
+	configureLoopback(t, dut1, loopback2IfName, dut1Loopback2IPv6, loopbackPrefixLen, true)
+	configureLoopback(t, dut2, loopback2IfName, dut2Loopback2IPv6, loopbackPrefixLen, true)
+
+	cfgplugins.ConfigureIPSecTunnel(t, dut1, cfgplugins.IPSecTunnelCfg{
+		TunnelName:  tunnel2IfName,
+		Description: "IPsec Tunnel Pair 2 to DUT2",
+		LocalFQDN:   dut1FQDN2,
+		RemoteFQDN:  dut2FQDN2,
+		TunnelIPv4:  dut1Tunnel2IPv4CIDR,
+		TunnelIPv6:  dut1Tunnel2IPv6CIDR,
+		TunnelSrc:   dut1Loopback2IPv6,
+		TunnelDst:   dut2Loopback2IPv6,
+		TunnelVRF:   tunnelVRF,
+		IKEPolicy:   "IKE_POLICY_2",
+		SAPolicy:    "SA_POLICY_2",
+		Profile:     "IPSEC_PROFILE_2",
+	})
+
+	cfgplugins.ConfigureIPSecTunnel(t, dut2, cfgplugins.IPSecTunnelCfg{
+		TunnelName:  tunnel2IfName,
+		Description: "IPsec Tunnel Pair 2 to DUT1",
+		LocalFQDN:   dut2FQDN2,
+		RemoteFQDN:  dut1FQDN2,
+		TunnelIPv4:  dut2Tunnel2IPv4CIDR,
+		TunnelIPv6:  dut2Tunnel2IPv6CIDR,
+		TunnelSrc:   dut2Loopback2IPv6,
+		TunnelDst:   dut1Loopback2IPv6,
+		TunnelVRF:   tunnelVRF,
+		IKEPolicy:   "IKE_POLICY_2",
+		SAPolicy:    "SA_POLICY_2",
+		Profile:     "IPSEC_PROFILE_2",
+	})
+
+	configureStaticRoutes(t, dut1, []staticRoute{{Prefix: dut2Loopback2Pfx, NextHop: dut2CoreIntf2.IPv6}, {Prefix: dut2Loopback2Pfx, NextHop: dut2CoreIntf1.IPv6}})
+	configureStaticRoutes(t, dut2, []staticRoute{{Prefix: dut1Loopback2Pfx, NextHop: dut1CoreIntf2.IPv6}, {Prefix: dut1Loopback2Pfx, NextHop: dut1CoreIntf1.IPv6}})
+
+	// Add a second equal-cost customer route via Tunnel2 so that customer
+	// traffic is load-balanced (ECMP) across both tunnels. When a tunnel goes
+	// DOWN its connected next-hop becomes unresolvable and the route is
+	// withdrawn, so traffic automatically falls back to the remaining tunnel.
+	configureStaticRoutes(t, dut1, []staticRoute{
+		{Prefix: ate2IPv4Prefix, NextHop: dut2Tunnel2IPv4NH, VRF: ateVRF, EgressVRF: tunnelVRF},
+		{Prefix: ate2IPv6Prefix, NextHop: dut2Tunnel2IPv6NH, VRF: ateVRF, EgressVRF: tunnelVRF},
+	})
+	configureStaticRoutes(t, dut2, []staticRoute{
+		{Prefix: ate1IPv4Prefix, NextHop: dut1Tunnel2IPv4NH, VRF: ateVRF, EgressVRF: tunnelVRF},
+		{Prefix: ate1IPv6Prefix, NextHop: dut1Tunnel2IPv6NH, VRF: ateVRF, EgressVRF: tunnelVRF},
+	})
+}
+
+func setShortSALifetime(t *testing.T, dut *ondatra.DUTDevice, seconds int) {
+	t.Helper()
+	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
+   sa policy SA_POLICY_1
+      sa lifetime %d
+!`, seconds))
+}
+
+func setShortIKELifetime(t *testing.T, dut *ondatra.DUTDevice, seconds int) {
+	t.Helper()
+	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
+   ike policy IKE_POLICY_1
+      ike-lifetime %d minutes
+!`, seconds))
+}
+
+func configureDPD(t *testing.T, dut *ondatra.DUTDevice, intervalSec, holdSec int) {
+	t.Helper()
+	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
+   profile IPSEC_PROFILE_1
+      dpd %d %d
+!`, intervalSec, holdSec))
+}
+
+func denyIKEToLoopback(t *testing.T, dut *ondatra.DUTDevice, dstLoopback string) {
+	t.Helper()
+	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ipv6 access-list ACL_BLOCK_IKE
+   10 deny udp any host %s eq 500
+   20 deny udp any host %s eq 4500
+   30 permit ipv6 any any
+!
+interface %s
+   ipv6 access-group ACL_BLOCK_IKE out
+!`, dstLoopback, dstLoopback, loopback2IfName))
+}
+
+func setMismatchedKey(t *testing.T, dut *ondatra.DUTDevice) {
+	t.Helper()
+	// Mismatch the key only on Tunnel2's dedicated profile so that Tunnel1, which
+	// uses IPSEC_PROFILE_1, stays UP while Tunnel2 goes DOWN.
+	helpers.GnmiCLIConfig(t, dut, `ip security
+   profile IPSEC_PROFILE_2
+      shared-key 7 074D0A0B0102
+!`)
+}
+
+func setMismatchedCipher(t *testing.T, dut *ondatra.DUTDevice) {
+	t.Helper()
+	// Mismatch the cipher only on Tunnel2's dedicated SA policy so that Tunnel1,
+	// which uses SA_POLICY_1, stays UP while Tunnel2 goes DOWN.
+	helpers.GnmiCLIConfig(t, dut, `ip security
+   sa policy SA_POLICY_2
+      esp encryption aes128gcm128
+!`)
+}
+
+func rotateSharedKey(t *testing.T, dut *ondatra.DUTDevice, key string) {
+	t.Helper()
+	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
+   profile IPSEC_PROFILE_1
+      shared-key 7 %s
+!`, key))
+}
+
+func disableFlowLabelHash(t *testing.T, dut *ondatra.DUTDevice) {
+	t.Helper()
+	helpers.GnmiCLIConfig(t, dut, `ip security
+   profile IPSEC_PROFILE_1
+      no outer-ipv6-flow-label-randomization
+!`)
+}
+
+func configureQoSClassification(t *testing.T, dut *ondatra.DUTDevice) {
+	t.Helper()
+	helpers.GnmiCLIConfig(t, dut, `class-map CM-IPSEC-AF3
+   match protocol ipsec
+!
+class-map CM-IKE-AF4
+   match protocol ike
+!
+policy-map PM-IPSEC-CONGESTION
+   class CM-IPSEC-AF3
+      set traffic-class 3
+   class CM-IKE-AF4
+      set traffic-class 4
+   class class-default
+      set traffic-class 1
+!`)
+}
+
+func verifyTunnelOperStatus(t *testing.T, dut *ondatra.DUTDevice, tunnelName string, want oc.E_Interface_OperStatus, timeout time.Duration) {
+	t.Helper()
+
+	path := gnmi.OC().Interface(tunnelName).OperStatus().State()
+	_, ok := gnmi.Watch(t, dut, path, timeout, func(val *ygnmi.Value[oc.E_Interface_OperStatus]) bool {
+		status, present := val.Val()
+		return present && status == want
+	}).Await(t)
+	if !ok {
+		got := gnmi.Get(t, dut, path)
+		t.Fatalf("tunnel %s oper-status got %v, want %v", tunnelName, got, want)
+	}
+}
+
+func readMemberOutPkts(t *testing.T, dut *ondatra.DUTDevice, memberPorts []*ondatra.Port) map[string]uint64 {
+	t.Helper()
+	vals := make(map[string]uint64)
+	for _, p := range memberPorts {
+		vals[p.Name()] = gnmi.Get(t, dut, gnmi.OC().Interface(p.Name()).Counters().OutPkts().State())
+	}
+	return vals
+}
+
+func verifyDUTDUTLoadBalance(t *testing.T, dut *ondatra.DUTDevice, memberPorts []*ondatra.Port, baseline map[string]uint64, tolerance float64, wantSingleLink bool) {
+	t.Helper()
+
+	after := readMemberOutPkts(t, dut, memberPorts)
+	delta := make(map[string]uint64)
+	var total uint64
+	active := 0
+
+	for _, p := range memberPorts {
+		name := p.Name()
+		if after[name] > baseline[name] {
+			delta[name] = after[name] - baseline[name]
+		}
+		total += delta[name]
+		if delta[name] > 0 {
+			active++
+		}
+	}
+
+	if total == 0 {
+		t.Fatalf("no packets observed on DUT-to-DUT member links")
+	}
+
+	if wantSingleLink {
+		if active != 1 {
+			t.Errorf("single-link expectation failed: active members got %d, want 1", active)
+		}
+		return
+	}
+
+	if active != len(memberPorts) {
+		t.Errorf("balanced load expectation failed: active members got %d, want %d", active, len(memberPorts))
+	}
+
+	evenShare := 1.0 / float64(len(memberPorts))
+	for _, p := range memberPorts {
+		name := p.Name()
+		share := float64(delta[name]) / float64(total)
+		if math.Abs(share-evenShare) > tolerance {
+			t.Errorf("member %s share got %.3f, want %.3f +/- %.3f", name, share, evenShare, tolerance)
+		}
+	}
+}
+
+func verifyTunnelOperStatusStaysUp(t *testing.T, dut *ondatra.DUTDevice, tunnelName string, window time.Duration) {
+	t.Helper()
+
+	path := gnmi.OC().Interface(tunnelName).OperStatus().State()
+	watch := gnmi.Watch(t, dut, path, window, func(val *ygnmi.Value[oc.E_Interface_OperStatus]) bool {
+		status, present := val.Val()
+		return present && status != oc.Interface_OperStatus_UP
+	})
+	if _, downSeen := watch.Await(t); downSeen {
+		got := gnmi.Get(t, dut, path)
+		t.Fatalf("tunnel %s oper-status changed during watch window, final got %v, want %v", tunnelName, got, oc.Interface_OperStatus_UP)
+	}
+	got := gnmi.Get(t, dut, path)
+	if got != oc.Interface_OperStatus_UP {
+		t.Fatalf("tunnel %s oper-status got %v, want %v", tunnelName, got, oc.Interface_OperStatus_UP)
+	}
+}
+
+func runTrafficWindow(t *testing.T, otg *otg.OTG, d time.Duration) {
+	t.Helper()
+	otg.StartTraffic(t)
+	time.Sleep(d)
+	otg.StopTraffic(t)
+}
+
+func verifyDSCPPreservation(t *testing.T, ate *ondatra.ATEDevice, dscp uint32) {
+	t.Helper()
+
+	otg := ate.OTG()
+	top := configureATE(t)
+	top.Flows().Clear()
+	DSCPPacketValidation.CaptureName = fmt.Sprintf("capture-dscp-%d", dscp)
+	DSCPPacketValidation.IPv4Layer.Tos = uint8(dscp << 2)
+	packetvalidationhelpers.ConfigurePacketCapture(t, top, DSCPPacketValidation)
+
+	flow := top.Flows().Add().SetName(fmt.Sprintf("Flow-IPv4-DSCP-%d", dscp))
+	flow.TxRx().Device().SetTxNames([]string{"p1d1ipv4"}).SetRxNames([]string{"p2d2ipv4"})
+	for _, sizeWeight := range sizeWeightProfile {
+		flow.Size().WeightPairs().Custom().Add().SetSize(sizeWeight.Size).SetWeight(sizeWeight.Weight)
+	}
+	flow.Rate().SetPps(trafficPPS)
+	flow.Duration().FixedPackets().SetPackets(trafficPkts)
+	flow.Metrics().SetEnable(true)
+
+	e := flow.Packet().Add().Ethernet()
+	e.Src().SetValue(ate1LagConfig.MAC)
+	flow.Packet().Add().Macsec()
+	flow.Packet().Add().Vlan().Id().SetValue(vlanID)
+	v4 := flow.Packet().Add().Ipv4()
+	v4.Src().SetValue(ate1LagConfig.IPv4)
+	v4.Dst().SetValue(ate2LagConfig.IPv4)
+	v4.Priority().Dscp().Phb().SetValue(dscp)
+
+	otg.PushConfig(t, top)
+	otg.StartProtocols(t)
+	otgutils.WaitForARP(t, otg, top, "IPv4")
+
+	cs := packetvalidationhelpers.StartCapture(t, ate)
+	runTrafficWindow(t, otg, 10*time.Second)
+	packetvalidationhelpers.StopCapture(t, ate, cs)
+
+	verifyTraffic(t, ate, top, flow.Name(), true)
+	if err := packetvalidationhelpers.CaptureAndValidatePackets(t, ate, DSCPPacketValidation); err != nil {
+		t.Errorf("CaptureAndValidatePackets() dscp=%d: %v", dscp, err)
+	}
+	packetvalidationhelpers.ClearCapture(t, top, ate)
+}
+
+func verifyFlowLabelPreservation(t *testing.T, ate *ondatra.ATEDevice, flowLabel uint32) {
+	t.Helper()
+
+	otg := ate.OTG()
+	top := configureATE(t)
+	top.Flows().Clear()
+	FlowLabelPacketValidation.CaptureName = fmt.Sprintf("capture-flowlabel-%d", flowLabel)
+	FlowLabelPacketValidation.IPv6Layer.FlowLabel = flowLabel
+	packetvalidationhelpers.ConfigurePacketCapture(t, top, FlowLabelPacketValidation)
+
+	flow := top.Flows().Add().SetName(fmt.Sprintf("Flow-IPv6-FlowLabel-%d", flowLabel))
+	flow.TxRx().Device().SetTxNames([]string{"p1d1ipv6"}).SetRxNames([]string{"p2d2ipv6"})
+	for _, sizeWeight := range sizeWeightProfile {
+		flow.Size().WeightPairs().Custom().Add().SetSize(sizeWeight.Size).SetWeight(sizeWeight.Weight)
+	}
+	flow.Rate().SetPps(trafficPPS)
+	flow.Duration().FixedPackets().SetPackets(trafficPkts)
+	flow.Metrics().SetEnable(true)
+
+	e := flow.Packet().Add().Ethernet()
+	e.Src().SetValue(ate1LagConfig.MAC)
+	flow.Packet().Add().Macsec()
+	flow.Packet().Add().Vlan().Id().SetValue(vlanID)
+	v6 := flow.Packet().Add().Ipv6()
+	v6.Src().SetValue(ate1LagConfig.IPv6)
+	v6.Dst().SetValue(ate2LagConfig.IPv6)
+	v6.FlowLabel().SetValue(flowLabel)
+
+	otg.PushConfig(t, top)
+	otg.StartProtocols(t)
+	otgutils.WaitForARP(t, otg, top, "IPv6")
+
+	cs := packetvalidationhelpers.StartCapture(t, ate)
+	runTrafficWindow(t, otg, 10*time.Second)
+	packetvalidationhelpers.StopCapture(t, ate, cs)
+
+	verifyTraffic(t, ate, top, flow.Name(), true)
+	if err := packetvalidationhelpers.CaptureAndValidatePackets(t, ate, FlowLabelPacketValidation); err != nil {
+		t.Errorf("CaptureAndValidatePackets() flowLabel=%d: %v", flowLabel, err)
+	}
+	packetvalidationhelpers.ClearCapture(t, top, ate)
+}
+
+func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
+	dut1 := ondatra.DUT(t, "dut1")
+	dut2 := ondatra.DUT(t, "dut2")
+	ate := ondatra.ATE(t, "ate")
+	otg := ate.OTG()
+
+	// Step: Configure DUT customer-facing interfaces, VLANs, VRFs, MACSec, and DUT-DUT transport aggregates.
+	// Create two core LAGs (each with 2 member ports) and apply to both DUTs.
+	// Use per-DUT aggregate IDs from netutil to ensure device-valid agg names.
+	// ATE still uses logical names ate1LagName/ate2LagName.
+
+	// Build DUT port objects from the custPorts/corePorts groupings.
+	dut1CorePortGroups := make([][]*ondatra.Port, len(corePorts))
+	dut2CorePortGroups := make([][]*ondatra.Port, len(corePorts))
+	var dut1CorePorts []*ondatra.Port
+	for i, group := range corePorts {
+		for _, name := range group {
+			dut1CorePortGroups[i] = append(dut1CorePortGroups[i], dut1.Port(t, name))
+			dut2CorePortGroups[i] = append(dut2CorePortGroups[i], dut2.Port(t, name))
+			dut1CorePorts = append(dut1CorePorts, dut1.Port(t, name))
+		}
+	}
+	// port5 on each DUT connects to ATE; on DUT1 it carries MACsec.
+	dut1CustPort := dut1.Port(t, custPorts[0])
+	dut2CustPort := dut2.Port(t, custPorts[0])
+
+	// DUT-specific attributes: core LAGs on each DUT use the core interface attributes.
+	dut1PortAttrs := []attrs.Attributes{dut1CoreIntf1, dut1CoreIntf2}
+	dut2PortAttrs := []attrs.Attributes{dut2CoreIntf1, dut2CoreIntf2}
+
+	// Create all VRFs upfront before configuring interfaces.
+	createVRFs(t, dut1, []string{ateVRF, tunnelVRF})
+	createVRFs(t, dut2, []string{ateVRF, tunnelVRF})
+
+	// Configure DUTs: generate one aggregate per port group inside configureDUT.
+	// The core port groups are the LAGs in TUNNEL_VRF for DUT-to-DUT communication.
+	configureDUT(t, dut1, dut1CorePortGroups, dut1PortAttrs, "")
+	configureDUT(t, dut1, [][]*ondatra.Port{{dut1CustPort}}, []attrs.Attributes{dut1CustIntf}, ateVRF)
+
+	configureDUT(t, dut2, dut2CorePortGroups, dut2PortAttrs, "")
+	configureDUT(t, dut2, [][]*ondatra.Port{{dut2CustPort}}, []attrs.Attributes{dut2CustIntf}, ateVRF)
+
+	// Configure loopback interfaces used as IPSec tunnel endpoints.
+	configureLoopback(t, dut1, loopbackIfName, dut1LoopbackIPv6, loopbackPrefixLen, true)
+	configureLoopback(t, dut2, loopbackIfName, dut2LoopbackIPv6, loopbackPrefixLen, true)
+
+	cfgplugins.ConfigureMACsec(t, dut1, cfgplugins.MACsecCfg{
+		IntfName:    dut1CustPort.Name(),
+		ProfileName: "macSecProfile",
+		CKN:         ckn,
+		CAK:         cak,
+		FallbackCKN: fallbackCkn,
+		FallbackCAK: fallbackCak,
+	})
+
+	cfgplugins.ConfigureIPSecTunnel(t, dut1, cfgplugins.IPSecTunnelCfg{
+		TunnelName:  tunnelIfName,
+		Description: "IPsec Tunnel Pair 1 to DUT2",
+		LocalFQDN:   dut1FQDN,
+		RemoteFQDN:  dut2FQDN,
+		TunnelIPv4:  dut1TunnelIPv4CIDR,
+		TunnelIPv6:  dut1TunnelIPv6CIDR,
+		TunnelSrc:   dut1LoopbackIPv6,
+		TunnelDst:   dut2LoopbackIPv6,
+		TunnelVRF:   tunnelVRF,
+	})
+
+	cfgplugins.ConfigureIPSecTunnel(t, dut2, cfgplugins.IPSecTunnelCfg{
 		TunnelName:  tunnelIfName,
 		Description: "IPsec Tunnel Pair 1 to DUT1",
 		LocalFQDN:   dut2FQDN,
@@ -1055,8 +1378,8 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 		{Prefix: ate2IPv4Prefix, NextHop: dut2TunnelIPv4NH, VRF: ateVRF, EgressVRF: tunnelVRF},
 		{Prefix: ate1IPv6Prefix, NextHop: ate1LagConfig.IPv6, VRF: tunnelVRF, EgressVRF: ateVRF},
 		{Prefix: ate2IPv6Prefix, NextHop: dut2TunnelIPv6NH, VRF: ateVRF, EgressVRF: tunnelVRF},
-		{Prefix: dut2LoopbackPfx, NextHop: dut2Lag2Config.IPv6},
-		{Prefix: dut2LoopbackPfx, NextHop: dut2Lag1Config.IPv6},
+		{Prefix: dut2LoopbackPfx, NextHop: dut2CoreIntf2.IPv6},
+		{Prefix: dut2LoopbackPfx, NextHop: dut2CoreIntf1.IPv6},
 	})
 
 	configureStaticRoutes(t, dut2, []staticRoute{
@@ -1064,14 +1387,14 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 		{Prefix: ate1IPv4Prefix, NextHop: dut1TunnelIPv4NH, VRF: ateVRF, EgressVRF: tunnelVRF},
 		{Prefix: ate2IPv6Prefix, NextHop: ate2LagConfig.IPv6, VRF: tunnelVRF, EgressVRF: ateVRF},
 		{Prefix: ate1IPv6Prefix, NextHop: dut1TunnelIPv6NH, VRF: ateVRF, EgressVRF: tunnelVRF},
-		{Prefix: dut1LoopbackPfx, NextHop: dut1Lag2Config.IPv6},
-		{Prefix: dut1LoopbackPfx, NextHop: dut1Lag1Config.IPv6},
+		{Prefix: dut1LoopbackPfx, NextHop: dut1CoreIntf2.IPv6},
+		{Prefix: dut1LoopbackPfx, NextHop: dut1CoreIntf1.IPv6},
 	})
 
 	// Step: Configure ATE topology and flows.
 	top := configureATE(t)
 	// Enable capture should be part of setconfig
-	top = enableCapture(t, top, []string{"port1"})
+	packetvalidationhelpers.ConfigurePacketCapture(t, top, MacsecPacketValidation)
 	otg.PushConfig(t, top)
 	otg.StartProtocols(t)
 
@@ -1083,36 +1406,292 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 	otgutils.WaitForARP(t, ate.OTG(), top, "IPv6")
 
 	// StartCapture should be called before starting the traffic
-	startCapture(t, ate)
+	cs := packetvalidationhelpers.StartCapture(t, ate)
 
-	// Step: Verify base operational readiness before traffic.
-	t.Run("BaselineTelemetry", func(t *testing.T) {
-		otg.StartTraffic(t)
+	// The subtests below map 1:1 to the IPSEC-1.1.x sections in the README.
+	tests := []struct {
+		name string
+		fn   func(t *testing.T)
+	}{
+		{
+			// Step: Verify base operational readiness before traffic.
+			name: "IPSEC-1.1.1: Verify Base IPv4 & IPv6 traffic forwarding with ipsec",
+			fn: func(t *testing.T) {
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTunnelOperStatus(t, dut2, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
 
-		// Wait for traffic to flow and stabilize.
-		time.Sleep(trafficWaitTime)
+				otg.StartTraffic(t)
 
-		otg.StopTraffic(t)
+				// Wait for traffic to flow and stabilize.
+				time.Sleep(trafficWaitTime)
 
-		// StopCapture should be called after stopping the traffic.
-		stopCapture(t, ate)
+				otg.StopTraffic(t)
 
-		// Wait for counters to stabilize after traffic stops.
-		time.Sleep(trafficWaitTime)
-		otgutils.LogFlowMetrics(t, otg, top)
+				// StopCapture should be called after stopping the traffic.
+				packetvalidationhelpers.StopCapture(t, ate, cs)
 
-		verifyTraffic(t, ate, flowIPv4Fwd, true)
-		verifyTraffic(t, ate, flowIPv4Bwd, true)
-		verifyTraffic(t, ate, flowIPv6Fwd, true)
-		verifyTraffic(t, ate, flowIPv6Bwd, true)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyTraffic(t, ate, top, flowIPv4Bwd, true)
+				verifyTraffic(t, ate, top, flowIPv6Fwd, true)
+				verifyTraffic(t, ate, top, flowIPv6Bwd, true)
 
-		// GetCapture should be called after stopping the traffic and before validation
-		captureReq := gosnappi.NewCaptureRequest()
-		captureReq.SetPortName("port1")
-		packetBytes := otg.GetCapture(t, captureReq)
+				// CaptureAndValidatePackets retrieves the capture and validates that the
+				// customer traffic is MACsec-encrypted (EtherType 0x88E5).
+				if err := packetvalidationhelpers.CaptureAndValidatePackets(t, ate, MacsecPacketValidation); err != nil {
+					t.Errorf("CaptureAndValidatePackets() MACsec: %v", err)
+				}
 
-		// Validate captured packets contain MACsec encryption
-		verifyCapturedMACSecPackets(t, packetBytes, "port1")
+				// TODO: Uncomment this
+				// for _, dscp := range []uint32{10, 20, 30} {
+				// 	verifyDSCPPreservation(t, ate, dscp)
+				// }
 
-	})
+				// TODO: Uncomment this
+				// for _, flowLabel := range []uint32{10, 1000} {
+				// 	verifyFlowLabelPreservation(t, ate, flowLabel)
+				// }
+			},
+		},
+		{
+			name: "IPSEC-1.1.2: Verify Line-Rate IPv4 Connectivity over a Single Tunnel",
+			fn: func(t *testing.T) {
+				pre := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 15*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, pre, 0.25, false)
+			},
+		},
+		{
+			name: "IPSEC-1.1.3: Verify Line-Rate IPv6 Connectivity over a Single Tunnel",
+			fn: func(t *testing.T) {
+				pre := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 15*time.Second)
+				verifyTraffic(t, ate, top, flowIPv6Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, pre, 0.25, false)
+			},
+		},
+		{
+			name: "IPSEC-1.1.4: Verify Hitless SA Renegotation (New Key Generation)",
+			fn: func(t *testing.T) {
+				setShortSALifetime(t, dut1, 10)
+				setShortSALifetime(t, dut2, 10)
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				runTrafficWindow(t, otg, 70*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyTraffic(t, ate, top, flowIPv4Bwd, true)
+			},
+		},
+		{
+			name: "IPSEC-1.1.5: Verify Hitless IKE Renegotation",
+			fn: func(t *testing.T) {
+				setShortIKELifetime(t, dut1, 60)
+				setShortIKELifetime(t, dut2, 60)
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				runTrafficWindow(t, otg, 70*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyTraffic(t, ate, top, flowIPv4Bwd, true)
+			},
+		},
+		{
+			// TODO: Check with Arista how to Filter IKE traffic directed at loopback on DUT2, which is expected to cause DPD keepalives over tunnel #2 to fail
+			name: "IPSEC-1.1.6: Verify DPD / dead-peer detection",
+			fn: func(t *testing.T) {
+				configureDualTunnels(t, dut1, dut2)
+				configureDPD(t, dut1, 2, 10)
+				configureDPD(t, dut2, 2, 10)
+				t.Cleanup(func() {
+					// Remove the ACL before tearing down tunnels so subsequent subtests are not affected.
+					helpers.GnmiCLIConfig(t, dut1, fmt.Sprintf("interface %s\n   no ipv6 access-group ACL_BLOCK_IKE out\n!", loopback2IfName))
+					helpers.GnmiCLIConfig(t, dut1, "no ipv6 access-list ACL_BLOCK_IKE")
+					helpers.GnmiCLIConfig(t, dut1, "no interface Tunnel2")
+					helpers.GnmiCLIConfig(t, dut2, "no interface Tunnel2")
+					configureBaseSingleTunnel(t, dut1, dut2)
+				})
+
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+
+				pre := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 20*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, pre, 0.30, false)
+
+				denyIKEToLoopback(t, dut1, dut2Loopback2IPv6)
+				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_DOWN, lagUpTimeout)
+
+				runTrafficWindow(t, otg, 20*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+			},
+		},
+		{
+			name: "IPSEC-1.1.7: Invalid Tunnel - Mismatch on Key",
+			fn: func(t *testing.T) {
+				configureDualTunnels(t, dut1, dut2)
+				t.Cleanup(func() {
+					// Remove the second tunnel configured by configureDualTunnels and
+					// restore the base single-tunnel setup for subsequent subtests.
+					helpers.GnmiCLIConfig(t, dut1, "no interface Tunnel2")
+					helpers.GnmiCLIConfig(t, dut2, "no interface Tunnel2")
+					configureBaseSingleTunnel(t, dut1, dut2)
+				})
+
+				// Pre-check: both tunnels are UP, traffic passes, and ECMP is balanced
+				// across the physical member links.
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+
+				preBoth := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 20*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, preBoth, 0.30, false)
+
+				// Introduce a key mismatch on Tunnel2 only; Tunnel1 stays UP.
+				setMismatchedKey(t, dut2)
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_DOWN, lagUpTimeout)
+
+				// Post-check: traffic still passes and ECMP remains balanced across the
+				// physical member links via the single healthy tunnel.
+				preSingle := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 20*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, preSingle, 0.30, false)
+			},
+		},
+		{
+			name: "IPSEC-1.1.8: Invalid Tunnel - Mismatch on Cipher Algorithm",
+			fn: func(t *testing.T) {
+				configureDualTunnels(t, dut1, dut2)
+				t.Cleanup(func() {
+					// Remove the second tunnel configured by configureDualTunnels and
+					// restore the base single-tunnel setup for subsequent subtests.
+					helpers.GnmiCLIConfig(t, dut1, "no interface Tunnel2")
+					helpers.GnmiCLIConfig(t, dut2, "no interface Tunnel2")
+					configureBaseSingleTunnel(t, dut1, dut2)
+				})
+
+				// Pre-check: both tunnels are UP, traffic passes, and ECMP is balanced
+				// across the physical member links.
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+
+				preBoth := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 20*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, preBoth, 0.30, false)
+
+				// Introduce a cipher mismatch on Tunnel2 only; Tunnel1 stays UP.
+				setMismatchedCipher(t, dut2)
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_DOWN, lagUpTimeout)
+
+				// Post-check: traffic still passes and ECMP remains balanced across the
+				// physical member links via the single healthy tunnel.
+				preSingle := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 20*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, preSingle, 0.30, false)
+			},
+		},
+		{
+			name: "IPSEC-1.1.9: Verify IPSec shared-key key rotation",
+			fn: func(t *testing.T) {
+				runTrafficWindow(t, otg, 10*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+
+				rotateSharedKey(t, dut1, "052B0A1A3F51")
+				rotateSharedKey(t, dut2, "052B0A1A3F51")
+				t.Cleanup(func() {
+					configureBaseSingleTunnel(t, dut1, dut2)
+				})
+
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				runTrafficWindow(t, otg, 10*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+			},
+		},
+		// {
+		// 	name: "IPSEC-1.1.10: Verify Flow-Label Hash-Disablement",
+		// 	fn: func(t *testing.T) {
+		// 		disableFlowLabelHash(t, dut1)
+		// 		t.Cleanup(func() {
+		// 			configureBaseSingleTunnel(t, dut1, dut2)
+		// 		})
+
+		// 		pre := readMemberOutPkts(t, dut1, dut1CorePorts)
+		// 		runTrafficWindow(t, otg, 20*time.Second)
+		// 		verifyTraffic(t, ate, top, flowIPv6Fwd, true)
+		// 		verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, pre, 0.35, true)
+		// 	},
+		// },
+		{
+			name: "IPSEC-1.1.11: Verify Tunnel Re-Pathing upon Failure",
+			fn: func(t *testing.T) {
+				preAll := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 15*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, preAll, 0.30, false)
+
+				downCfg := &oc.Interface{Name: ygot.String(dut1CorePorts[0].Name())}
+				downCfg.Enabled = ygot.Bool(false)
+				gnmi.Update(t, dut1, gnmi.OC().Interface(dut1CorePorts[0].Name()).Config(), downCfg)
+				t.Cleanup(func() {
+					upCfg := &oc.Interface{Name: ygot.String(dut1CorePorts[0].Name())}
+					upCfg.Enabled = ygot.Bool(true)
+					gnmi.Update(t, dut1, gnmi.OC().Interface(dut1CorePorts[0].Name()).Config(), upCfg)
+				})
+
+				preRemain := readMemberOutPkts(t, dut1, dut1CorePorts[1:])
+				runTrafficWindow(t, otg, 20*time.Second)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts[1:], preRemain, 0.35, false)
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+			},
+		},
+		// {
+		// 	name: "IPSEC-1.1.12: Verify QoS: Control Plane survives with Dataplane Congestion",
+		// 	fn: func(t *testing.T) {
+		// 		const renewalWindow = 75 * time.Second
+
+		// 		for _, p := range dut1CorePorts[1:] {
+		// 			dis := &oc.Interface{Name: ygot.String(p.Name())}
+		// 			dis.Enabled = ygot.Bool(false)
+		// 			gnmi.Update(t, dut1, gnmi.OC().Interface(p.Name()).Config(), dis)
+		// 		}
+		// 		t.Cleanup(func() {
+		// 			for _, p := range dut1CorePorts[1:] {
+		// 				en := &oc.Interface{Name: ygot.String(p.Name())}
+		// 				en.Enabled = ygot.Bool(true)
+		// 				gnmi.Update(t, dut1, gnmi.OC().Interface(p.Name()).Config(), en)
+		// 			}
+		// 			configureBaseSingleTunnel(t, dut1, dut2)
+		// 		})
+
+		// 		configureQoSClassification(t, dut1)
+		// 		setShortSALifetime(t, dut1, 60)
+		// 		setShortSALifetime(t, dut2, 60)
+		// 		setShortIKELifetime(t, dut1, 60)
+		// 		setShortIKELifetime(t, dut2, 60)
+		// 		configureDPD(t, dut1, 2, 10)
+		// 		configureDPD(t, dut2, 2, 10)
+		// 		// With SA/IKE lifetimes set to 60s and a 75s run, at least one renewal should
+		// 		// occur; tunnel-stays-up across the full window is used as the hitless proxy.
+		// 		t.Log("short SA/IKE lifetimes applied; validating tunnel stays UP through renewal window")
+
+		// 		verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+		// 		verifyTunnelOperStatus(t, dut2, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+		// 		otg.StartTraffic(t)
+		// 		verifyTunnelOperStatusStaysUp(t, dut1, tunnelIfName, renewalWindow)
+		// 		verifyTunnelOperStatusStaysUp(t, dut2, tunnelIfName, renewalWindow)
+		// 		otg.StopTraffic(t)
+		// 		verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+		// 		verifyTunnelOperStatus(t, dut2, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+		// 		verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+		// 	},
+		// },
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, tc.fn)
+	}
 }
