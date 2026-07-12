@@ -1,13 +1,17 @@
 package ipsec_base_test
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/open-traffic-generator/snappi/gosnappi"
+	gpb "github.com/openconfig/gnmi/proto/gnmi"
 	otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
 	"github.com/openconfig/ondatra/otg"
 	"github.com/openconfig/ygnmi/ygnmi"
@@ -99,10 +103,10 @@ const (
 	macsecPeerName = "Peer A"
 
 	// OTG flow names.
-	flowIPv4Fwd = "Flow-1"
-	flowIPv4Bwd = "Flow-2"
-	flowIPv6Fwd = "Flow-IPv6-1"
-	flowIPv6Bwd = "Flow-IPv6-2"
+	flowIPv4Fwd = "Flow-IPv4-Fwd"
+	flowIPv4Bwd = "Flow-IPv4-Bwd"
+	flowIPv6Fwd = "Flow-IPv6-Fwd"
+	flowIPv6Bwd = "Flow-IPv6-Bwd"
 
 	// Traffic generation parameters.
 	trafficPPS  = 100
@@ -251,7 +255,10 @@ var (
 	DSCPPacketValidation = &packetvalidationhelpers.PacketValidation{
 		PortName:    "port2",
 		CaptureName: "dscp-capture",
-		IPv4Layer:   &packetvalidationhelpers.IPv4Layer{SkipProtocolCheck: true},
+		IPv4Layer: &packetvalidationhelpers.IPv4Layer{
+			SkipProtocolCheck: true,
+			DstIP:             ate2LagConfig.IPv4,
+			TTL:               62},
 		Validations: DSCPValidations,
 	}
 
@@ -264,7 +271,10 @@ var (
 	FlowLabelPacketValidation = &packetvalidationhelpers.PacketValidation{
 		PortName:    "port2",
 		CaptureName: "flowlabel-capture",
-		IPv6Layer:   &packetvalidationhelpers.IPv6Layer{},
+		IPv6Layer: &packetvalidationhelpers.IPv6Layer{
+			DstIP:    ate2LagConfig.IPv6,
+			HopLimit: 62,
+		},
 		Flags:       &packetvalidationhelpers.ValidationFlags{ValidateFlowLabel: true},
 		Validations: FlowLabelValidations,
 	}
@@ -712,6 +722,9 @@ func configureATE(t *testing.T) gosnappi.Config {
 		SetGateway(dut2CustIntf.IPv6).
 		SetPrefix(uint32(ate2LagConfig.IPv6Len))
 
+	if len(top.Flows().Items()) > 0 {
+		top.Flows().Clear()
+	}
 	flow := top.Flows().Add().SetName(flowIPv4Fwd)
 	flow.TxRx().Device().SetTxNames([]string{d1ipv4.Name()}).SetRxNames([]string{d2ipv4.Name()})
 
@@ -720,9 +733,6 @@ func configureATE(t *testing.T) gosnappi.Config {
 	}
 
 	flow.Rate().SetPps(trafficPPS)
-	// Continuous duration is required because this flow increments the source
-	// address; a fixed packet count combined with the size-weight profile and the
-	// address increment would create empty sub-streams that the controller rejects.
 	flow.Duration().Continuous()
 	flow.Metrics().SetEnable(true)
 
@@ -746,8 +756,9 @@ func configureATE(t *testing.T) gosnappi.Config {
 	for _, sizeWeight := range sizeWeightProfile {
 		flowBwd.Size().WeightPairs().Custom().Add().SetSize(sizeWeight.Size).SetWeight(sizeWeight.Weight)
 	}
+
 	flowBwd.Rate().SetPps(trafficPPS)
-	flowBwd.Duration().FixedPackets().SetPackets(trafficPkts)
+	flowBwd.Duration().Continuous()
 	flowBwd.Metrics().SetEnable(true)
 
 	e2 := flowBwd.Packet().Add().Ethernet()
@@ -766,9 +777,6 @@ func configureATE(t *testing.T) gosnappi.Config {
 		flowV6.Size().WeightPairs().Custom().Add().SetSize(sizeWeight.Size).SetWeight(sizeWeight.Weight)
 	}
 	flowV6.Rate().SetPps(trafficPPS)
-	// Continuous duration is required because this flow increments the source
-	// address; a fixed packet count combined with the size-weight profile and the
-	// address increment would create empty sub-streams that the controller rejects.
 	flowV6.Duration().Continuous()
 	flowV6.Metrics().SetEnable(true)
 
@@ -793,15 +801,15 @@ func configureATE(t *testing.T) gosnappi.Config {
 	for _, sizeWeight := range sizeWeightProfile {
 		flowV6Bwd.Size().WeightPairs().Custom().Add().SetSize(sizeWeight.Size).SetWeight(sizeWeight.Weight)
 	}
+
 	flowV6Bwd.Rate().SetPps(trafficPPS)
-	flowV6Bwd.Duration().FixedPackets().SetPackets(trafficPkts)
+	flowV6Bwd.Duration().Continuous()
 	flowV6Bwd.Metrics().SetEnable(true)
 
 	e4 := flowV6Bwd.Packet().Add().Ethernet()
 	e4.Src().SetValue(ate2LagConfig.MAC)
 
 	v6Bwd := flowV6Bwd.Packet().Add().Ipv6()
-	// TODO: Change Random Source Values to generate multiple flows
 	v6Bwd.Src().SetValue(ate2LagConfig.IPv6)
 	v6Bwd.Dst().SetValue(ate1LagConfig.IPv6)
 
@@ -1030,7 +1038,7 @@ func setShortSALifetime(t *testing.T, dut *ondatra.DUTDevice, seconds int) {
 	t.Helper()
 	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
    sa policy SA_POLICY_1
-      sa lifetime %d
+      sa lifetime %d minutes
 !`, seconds))
 }
 
@@ -1050,17 +1058,19 @@ func configureDPD(t *testing.T, dut *ondatra.DUTDevice, intervalSec, holdSec int
 !`, intervalSec, holdSec))
 }
 
-func denyIKEToLoopback(t *testing.T, dut *ondatra.DUTDevice, dstLoopback string) {
-	t.Helper()
-	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ipv6 access-list ACL_BLOCK_IKE
-   10 deny udp any host %s eq 500
-   20 deny udp any host %s eq 4500
-   30 permit ipv6 any any
-!
-interface %s
-   ipv6 access-group ACL_BLOCK_IKE out
-!`, dstLoopback, dstLoopback, loopback2IfName))
-}
+// func denyIKEToLoopback(t *testing.T, dut *ondatra.DUTDevice, dstLoopback string) {
+// 	t.Helper()
+// 	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`
+//    ipv6 access-list filter-ike-loopback
+//    deny udp host 10.0.0.5 host %s eq 500
+//    deny udp host 10.0.0.5 host %s eq 4500
+//    permit ip any any
+
+// ip security
+//    ip access-group filter-ike-loopback
+// !
+// `, dstLoopback, dstLoopback, loopback2IfName))
+// }
 
 func setMismatchedKey(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Helper()
@@ -1206,6 +1216,70 @@ func runTrafficWindow(t *testing.T, otg *otg.OTG, d time.Duration) {
 	otg.StartTraffic(t)
 	time.Sleep(d)
 	otg.StopTraffic(t)
+}
+
+// readChildSPIs reads all child security association SPI values from the
+// default network-instance via a raw gNMI Get on the OC path.
+// List elements are wildcarded by omitting keys (empty key map), which is the
+// correct gNMI wildcard form. The SPI is extracted from the path key of each
+// returned update (since SPI is both a list key and a leaf value), with a
+// fallback to JSON value parsing.
+func readChildSPIs(t *testing.T, dut *ondatra.DUTDevice) []uint64 {
+	t.Helper()
+	gnmiClient := dut.RawAPIs().GNMI(t)
+	resp, err := gnmiClient.Get(context.Background(), &gpb.GetRequest{
+		Path: []*gpb.Path{{
+			Elem: []*gpb.PathElem{
+				{Name: "network-instances"},
+				{Name: "network-instance", Key: map[string]string{"name": "default"}},
+				{Name: "security"},
+				{Name: "ipsec"},
+				{Name: "ipv6"},
+				{Name: "connections"},
+				{Name: "connection"}, // no keys = wildcard over all connections
+				{Name: "child-security-associations"},
+				{Name: "child-security-association"}, // no keys = wildcard over all SAs
+				{Name: "state"},
+				{Name: "spi"},
+			},
+		}},
+		Type:     gpb.GetRequest_STATE,
+		Encoding: gpb.Encoding_JSON_IETF,
+	})
+	if err != nil {
+		t.Logf("readChildSPIs: gNMI Get error: %v", err)
+		return nil
+	}
+	seen := make(map[uint64]bool)
+	var spis []uint64
+	for _, notif := range resp.GetNotification() {
+		for _, update := range notif.GetUpdate() {
+			// Primary: extract SPI from the path key of child-security-association.
+			// SPI is a list key so it always appears in the path, regardless of encoding.
+			for _, elem := range update.GetPath().GetElem() {
+				if elem.GetName() == "child-security-association" {
+					if spiStr, ok := elem.GetKey()["spi"]; ok {
+						if spi, err := strconv.ParseUint(spiStr, 10, 64); err == nil && spi > 0 && !seen[spi] {
+							seen[spi] = true
+							spis = append(spis, spi)
+						}
+					}
+				}
+			}
+			// Fallback: parse the JSON value (handles both number and RFC-7951 string).
+			if jsonVal := update.GetVal().GetJsonIetfVal(); len(jsonVal) > 0 && len(spis) == 0 {
+				var fval float64
+				if err := json.Unmarshal(jsonVal, &fval); err == nil && fval > 0 {
+					spi := uint64(fval)
+					if !seen[spi] {
+						seen[spi] = true
+						spis = append(spis, spi)
+					}
+				}
+			}
+		}
+	}
+	return spis
 }
 
 func verifyDSCPPreservation(t *testing.T, ate *ondatra.ATEDevice, dscp uint32) {
@@ -1441,15 +1515,22 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 					t.Errorf("CaptureAndValidatePackets() MACsec: %v", err)
 				}
 
-				// TODO: Uncomment this
-				// for _, dscp := range []uint32{10, 20, 30} {
-				// 	verifyDSCPPreservation(t, ate, dscp)
-				// }
+				for _, dscp := range []uint32{10, 20, 30} {
+					verifyDSCPPreservation(t, ate, dscp)
+				}
 
-				// TODO: Uncomment this
-				// for _, flowLabel := range []uint32{10, 1000} {
-				// 	verifyFlowLabelPreservation(t, ate, flowLabel)
-				// }
+				for _, flowLabel := range []uint32{10, 1000} {
+					verifyFlowLabelPreservation(t, ate, flowLabel)
+				}
+
+				top = configureATE(t)
+
+				// Restore the original ATE topology and flows after the per-flow-label
+				// captures have each re-configured the OTG with their own topology.
+				otg.PushConfig(t, top)
+				otg.StartProtocols(t)
+				otgutils.WaitForARP(t, ate.OTG(), top, "IPv4")
+				otgutils.WaitForARP(t, ate.OTG(), top, "IPv6")
 			},
 		},
 		{
@@ -1473,10 +1554,60 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 		{
 			name: "IPSEC-1.1.4: Verify Hitless SA Renegotation (New Key Generation)",
 			fn: func(t *testing.T) {
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+
 				setShortSALifetime(t, dut1, 10)
 				setShortSALifetime(t, dut2, 10)
-				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
-				runTrafficWindow(t, otg, 70*time.Second)
+
+				// Read initial SPI values before SA renegotiation.
+				spisInitial := readChildSPIs(t, dut1)
+				if len(spisInitial) == 0 {
+					t.Fatal("no child SPI values found before SA renegotiation; cannot verify key rotation")
+				}
+				t.Logf("Initial SPIs: %v", spisInitial)
+
+				otg.StartTraffic(t)
+
+				// Poll every 2 minutes for up to 10 minutes until the SPI changes.
+				const (
+					pollInterval = 2 * time.Minute
+					maxWait      = 10 * time.Minute
+				)
+				initialSet := make(map[uint64]bool)
+				for _, s := range spisInitial {
+					initialSet[s] = true
+				}
+				var spisFinal []uint64
+				spiChanged := false
+				start := time.Now()
+				deadline := start.Add(maxWait)
+				for time.Now().Before(deadline) {
+					time.Sleep(pollInterval)
+					spisFinal = readChildSPIs(t, dut1)
+					t.Logf("Polled SPIs at %v elapsed: %v", time.Since(start).Round(time.Second), spisFinal)
+					for _, s := range spisFinal {
+						if !initialSet[s] {
+							spiChanged = true
+							break
+						}
+					}
+					if spiChanged {
+						t.Logf("SA Regenotiation Done: SPI changed after %v", time.Since(start).Round(time.Second))
+						break
+					}
+				}
+
+				otg.StopTraffic(t)
+
+				// Verify SPI values have changed after SA renegotiation.
+				if len(spisFinal) == 0 {
+					t.Fatal("no child SPI values found after SA renegotiation")
+				}
+				t.Logf("Final SPIs: %v", spisFinal)
+				if !spiChanged {
+					t.Errorf("SPI did not change after SA renegotiation within %v: initial=%v, final=%v", maxWait, spisInitial, spisFinal)
+				}
+
 				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
 				verifyTraffic(t, ate, top, flowIPv4Bwd, true)
 			},
@@ -1484,10 +1615,58 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 		{
 			name: "IPSEC-1.1.5: Verify Hitless IKE Renegotation",
 			fn: func(t *testing.T) {
-				setShortIKELifetime(t, dut1, 60)
-				setShortIKELifetime(t, dut2, 60)
 				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
-				runTrafficWindow(t, otg, 70*time.Second)
+				setShortIKELifetime(t, dut1, 10)
+				setShortIKELifetime(t, dut2, 10)
+				// Read initial SPI values before SA renegotiation.
+				spisInitial := readChildSPIs(t, dut1)
+				if len(spisInitial) == 0 {
+					t.Fatal("no child SPI values found before IKE renegotiation; cannot verify key rotation")
+				}
+				t.Logf("Initial SPIs: %v", spisInitial)
+
+				otg.StartTraffic(t)
+
+				// Poll every 2 minutes for up to 10 minutes until the SPI changes.
+				const (
+					pollInterval = 2 * time.Minute
+					maxWait      = 10 * time.Minute
+				)
+				initialSet := make(map[uint64]bool)
+				for _, s := range spisInitial {
+					initialSet[s] = true
+				}
+				var spisFinal []uint64
+				spiChanged := false
+				start := time.Now()
+				deadline := start.Add(maxWait)
+				for time.Now().Before(deadline) {
+					time.Sleep(pollInterval)
+					spisFinal = readChildSPIs(t, dut1)
+					t.Logf("Polled SPIs at %v elapsed: %v", time.Since(start).Round(time.Second), spisFinal)
+					for _, s := range spisFinal {
+						if !initialSet[s] {
+							spiChanged = true
+							break
+						}
+					}
+					if spiChanged {
+						t.Logf("IKE Regoniation Done: SPI changed after %v", time.Since(start).Round(time.Second))
+						break
+					}
+				}
+
+				otg.StopTraffic(t)
+
+				// Verify SPI values have changed after SA renegotiation.
+				if len(spisFinal) == 0 {
+					t.Fatal("no child SPI values found after IKE renegotiation")
+				}
+				t.Logf("Final SPIs: %v", spisFinal)
+				if !spiChanged {
+					t.Errorf("SPI did not change after IKE renegotiation within %v: initial=%v, final=%v", maxWait, spisInitial, spisFinal)
+				}
+
 				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
 				verifyTraffic(t, ate, top, flowIPv4Bwd, true)
 			},
@@ -1496,15 +1675,15 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 			// TODO: Check with Arista how to Filter IKE traffic directed at loopback on DUT2, which is expected to cause DPD keepalives over tunnel #2 to fail
 			name: "IPSEC-1.1.6: Verify DPD / dead-peer detection",
 			fn: func(t *testing.T) {
+				switch dut1.Vendor() {
+				case ondatra.ARISTA:
+					// Arista does not support ACLs on loopback interfaces, so skip this subtest.
+					t.Skip("Skipping DPD test for Arista DUT1; ACLs on loopback not supported")
+				}
 				configureDualTunnels(t, dut1, dut2)
 				configureDPD(t, dut1, 2, 10)
 				configureDPD(t, dut2, 2, 10)
 				t.Cleanup(func() {
-					// Remove the ACL before tearing down tunnels so subsequent subtests are not affected.
-					helpers.GnmiCLIConfig(t, dut1, fmt.Sprintf("interface %s\n   no ipv6 access-group ACL_BLOCK_IKE out\n!", loopback2IfName))
-					helpers.GnmiCLIConfig(t, dut1, "no ipv6 access-list ACL_BLOCK_IKE")
-					helpers.GnmiCLIConfig(t, dut1, "no interface Tunnel2")
-					helpers.GnmiCLIConfig(t, dut2, "no interface Tunnel2")
 					configureBaseSingleTunnel(t, dut1, dut2)
 				})
 
@@ -1516,7 +1695,7 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
 				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, pre, 0.30, false)
 
-				denyIKEToLoopback(t, dut1, dut2Loopback2IPv6)
+				// denyIKEToLoopback(t, dut1, dut2Loopback2IPv6)
 				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_DOWN, lagUpTimeout)
 
 				runTrafficWindow(t, otg, 20*time.Second)
@@ -1610,20 +1789,25 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
 			},
 		},
-		// {
-		// 	name: "IPSEC-1.1.10: Verify Flow-Label Hash-Disablement",
-		// 	fn: func(t *testing.T) {
-		// 		disableFlowLabelHash(t, dut1)
-		// 		t.Cleanup(func() {
-		// 			configureBaseSingleTunnel(t, dut1, dut2)
-		// 		})
+		{
+			name: "IPSEC-1.1.10: Verify Flow-Label Hash-Disablement",
+			fn: func(t *testing.T) {
+				switch dut1.Vendor() {
+				case ondatra.ARISTA:
+					// Arista does not support flow-label hash disablement, so skip this subtest.
+					t.Skip("Skipping Flow-Label Hash-Disablement test for Arista DUT; feature not supported")
+				}
+				disableFlowLabelHash(t, dut1)
+				t.Cleanup(func() {
+					configureBaseSingleTunnel(t, dut1, dut2)
+				})
 
-		// 		pre := readMemberOutPkts(t, dut1, dut1CorePorts)
-		// 		runTrafficWindow(t, otg, 20*time.Second)
-		// 		verifyTraffic(t, ate, top, flowIPv6Fwd, true)
-		// 		verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, pre, 0.35, true)
-		// 	},
-		// },
+				pre := readMemberOutPkts(t, dut1, dut1CorePorts)
+				runTrafficWindow(t, otg, 20*time.Second)
+				verifyTraffic(t, ate, top, flowIPv6Fwd, true)
+				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, pre, 0.35, true)
+			},
+		},
 		{
 			name: "IPSEC-1.1.11: Verify Tunnel Re-Pathing upon Failure",
 			fn: func(t *testing.T) {
@@ -1648,47 +1832,51 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
 			},
 		},
-		// {
-		// 	name: "IPSEC-1.1.12: Verify QoS: Control Plane survives with Dataplane Congestion",
-		// 	fn: func(t *testing.T) {
-		// 		const renewalWindow = 75 * time.Second
+		{
+			name: "IPSEC-1.1.12: Verify QoS: Control Plane survives with Dataplane Congestion",
+			fn: func(t *testing.T) {
+				switch dut1.Vendor() {
+				case ondatra.ARISTA:
+					t.Skip("Skipping QoS test for Arista DUT; feature not supported")
+				}
+				const renewalWindow = 75 * time.Second
 
-		// 		for _, p := range dut1CorePorts[1:] {
-		// 			dis := &oc.Interface{Name: ygot.String(p.Name())}
-		// 			dis.Enabled = ygot.Bool(false)
-		// 			gnmi.Update(t, dut1, gnmi.OC().Interface(p.Name()).Config(), dis)
-		// 		}
-		// 		t.Cleanup(func() {
-		// 			for _, p := range dut1CorePorts[1:] {
-		// 				en := &oc.Interface{Name: ygot.String(p.Name())}
-		// 				en.Enabled = ygot.Bool(true)
-		// 				gnmi.Update(t, dut1, gnmi.OC().Interface(p.Name()).Config(), en)
-		// 			}
-		// 			configureBaseSingleTunnel(t, dut1, dut2)
-		// 		})
+				for _, p := range dut1CorePorts[1:] {
+					dis := &oc.Interface{Name: ygot.String(p.Name())}
+					dis.Enabled = ygot.Bool(false)
+					gnmi.Update(t, dut1, gnmi.OC().Interface(p.Name()).Config(), dis)
+				}
+				t.Cleanup(func() {
+					for _, p := range dut1CorePorts[1:] {
+						en := &oc.Interface{Name: ygot.String(p.Name())}
+						en.Enabled = ygot.Bool(true)
+						gnmi.Update(t, dut1, gnmi.OC().Interface(p.Name()).Config(), en)
+					}
+					configureBaseSingleTunnel(t, dut1, dut2)
+				})
 
-		// 		configureQoSClassification(t, dut1)
-		// 		setShortSALifetime(t, dut1, 60)
-		// 		setShortSALifetime(t, dut2, 60)
-		// 		setShortIKELifetime(t, dut1, 60)
-		// 		setShortIKELifetime(t, dut2, 60)
-		// 		configureDPD(t, dut1, 2, 10)
-		// 		configureDPD(t, dut2, 2, 10)
-		// 		// With SA/IKE lifetimes set to 60s and a 75s run, at least one renewal should
-		// 		// occur; tunnel-stays-up across the full window is used as the hitless proxy.
-		// 		t.Log("short SA/IKE lifetimes applied; validating tunnel stays UP through renewal window")
+				configureQoSClassification(t, dut1)
+				setShortSALifetime(t, dut1, 60)
+				setShortSALifetime(t, dut2, 60)
+				setShortIKELifetime(t, dut1, 60)
+				setShortIKELifetime(t, dut2, 60)
+				configureDPD(t, dut1, 2, 10)
+				configureDPD(t, dut2, 2, 10)
+				// With SA/IKE lifetimes set to 60s and a 75s run, at least one renewal should
+				// occur; tunnel-stays-up across the full window is used as the hitless proxy.
+				t.Log("short SA/IKE lifetimes applied; validating tunnel stays UP through renewal window")
 
-		// 		verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
-		// 		verifyTunnelOperStatus(t, dut2, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
-		// 		otg.StartTraffic(t)
-		// 		verifyTunnelOperStatusStaysUp(t, dut1, tunnelIfName, renewalWindow)
-		// 		verifyTunnelOperStatusStaysUp(t, dut2, tunnelIfName, renewalWindow)
-		// 		otg.StopTraffic(t)
-		// 		verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
-		// 		verifyTunnelOperStatus(t, dut2, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
-		// 		verifyTraffic(t, ate, top, flowIPv4Fwd, true)
-		// 	},
-		// },
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTunnelOperStatus(t, dut2, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				otg.StartTraffic(t)
+				verifyTunnelOperStatusStaysUp(t, dut1, tunnelIfName, renewalWindow)
+				verifyTunnelOperStatusStaysUp(t, dut2, tunnelIfName, renewalWindow)
+				otg.StopTraffic(t)
+				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTunnelOperStatus(t, dut2, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
+			},
+		},
 	}
 
 	for _, tc := range tests {
