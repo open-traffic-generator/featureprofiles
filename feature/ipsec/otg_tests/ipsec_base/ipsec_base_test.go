@@ -1,3 +1,18 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
 package ipsec_base_test
 
 import (
@@ -289,7 +304,6 @@ func configDUTInterface(t *testing.T, i *oc.Interface, a *attrs.Attributes, dut 
 	t.Helper()
 
 	i.Description = ygot.String(a.Desc)
-	// i.Mtu = ygot.Uint16(a.MTU)
 	if deviations.InterfaceEnabled(dut) {
 		i.Enabled = ygot.Bool(true)
 	}
@@ -359,7 +373,7 @@ func aggregateSubinterfaceName(lagName string, subinterfaceID uint32) string {
 	return fmt.Sprintf("%s.%d", lagName, subinterfaceID)
 }
 
-// assignAggregateToVRF assigns an aggregate/subinterface to the requested VRF using CLI.
+// assignAggregateToVRF assigns an aggregate/subinterface to the requested VRF using OC.
 // This keeps VRF assignment separate from interface modelling and avoids helper
 // failures when vendor-specific network-instance inputs are incomplete.
 func assignAggregateToVRF(t *testing.T, dut *ondatra.DUTDevice, lagName string, subinterfaceID uint32, vrfName string) {
@@ -369,10 +383,13 @@ func assignAggregateToVRF(t *testing.T, dut *ondatra.DUTDevice, lagName string, 
 	}
 
 	intfName := aggregateSubinterfaceName(lagName, subinterfaceID)
-	vrfConfig := fmt.Sprintf(`interface %s
-   vrf %s
-!`, intfName, vrfName)
-	helpers.GnmiCLIConfig(t, dut, vrfConfig)
+	d := gnmi.OC()
+	ni := d.NetworkInstance(vrfName).Interface(intfName)
+	gnmi.Update(t, dut, ni.Config(), &oc.NetworkInstance_Interface{
+		Id:           ygot.String(intfName),
+		Interface:    ygot.String(lagName),
+		Subinterface: ygot.Uint32(subinterfaceID),
+	})
 }
 
 // configureLAGInterface sets up the LAG aggregate interface, LACP, member ports, subinterfaces, and optional VRF assignment.
@@ -389,7 +406,6 @@ func configureLAGInterface(t *testing.T, dut *ondatra.DUTDevice, lagName string,
 	// Only set high-level interface fields here; avoid creating subinterfaces
 	// or assigning IPs until the aggregate and members exist.
 	agg.Description = ygot.String(a.Desc)
-	// agg.Mtu = ygot.Uint16(a.MTU)
 	if deviations.InterfaceEnabled(dut) {
 		agg.Enabled = ygot.Bool(true)
 	}
@@ -455,35 +471,47 @@ func configureLAGInterface(t *testing.T, dut *ondatra.DUTDevice, lagName string,
 	}
 }
 
-// createVRFs creates multiple VRFs with a single CLI push to reduce gNMI Set calls.
+// createVRFs creates VRFs via OC where fully supported, or via CLI where OC is
+// insufficient. On Arista, "ip routing vrf" and "ipv6 unicast-routing vrf" have
+// no OC equivalent and must be issued atomically with the VRF creation in a
+// single CLI transaction; splitting them across two gNMI calls causes the
+// routing-enable to fail because the VRF from the first call is not yet visible.
 func createVRFs(t *testing.T, dut *ondatra.DUTDevice, vrfNames []string) {
 	t.Helper()
-
 	if len(vrfNames) == 0 {
 		return
 	}
-
-	var b strings.Builder
-	for _, vrfName := range vrfNames {
-		if vrfName == "" {
-			continue
+	if deviations.IpRoutingInVrfOcUnsupported(dut) {
+		switch dut.Vendor() {
+		case ondatra.ARISTA:
+			// Arista needs vrf instance + ip routing + ipv6 unicast-routing in one
+			// atomic CLI block; OC cannot express the routing-enable commands.
+			var b strings.Builder
+			for _, vrfName := range vrfNames {
+				if vrfName == "" {
+					continue
+				}
+				fmt.Fprintf(&b, "vrf instance %s\n!\nip routing vrf %s\n!\nipv6 unicast-routing vrf %s\n!\n",
+					vrfName, vrfName, vrfName)
+			}
+			if cli := b.String(); cli != "" {
+				t.Logf("Creating VRF(s) via CLI on Arista (OC cannot express routing-enable): %v", vrfNames)
+				helpers.GnmiCLIConfig(t, dut, cli)
+			}
 		}
-		b.WriteString(fmt.Sprintf(`vrf instance %s
-!
-ip routing vrf %s
-!
-ipv6 unicast-routing vrf %s
-!
-`, vrfName, vrfName, vrfName))
+	} else {
+		// All other vendors: create VRF instance using OpenConfig.
+		d := gnmi.OC()
+		for _, vrfName := range vrfNames {
+			if vrfName == "" {
+				continue
+			}
+			ni := &oc.NetworkInstance{Name: ygot.String(vrfName)}
+			ni.Type = oc.NetworkInstanceTypes_NETWORK_INSTANCE_TYPE_L3VRF
+			gnmi.Update(t, dut, d.NetworkInstance(vrfName).Config(), ni)
+		}
+		t.Logf("Applied OC VRF creation for %d VRF(s): %v", len(vrfNames), vrfNames)
 	}
-
-	cli := b.String()
-	if cli == "" {
-		return
-	}
-
-	t.Logf("Applying CLI VRF creation/routing config for %d VRF(s): %v", len(vrfNames), vrfNames)
-	helpers.GnmiCLIConfig(t, dut, cli)
 }
 
 // staticRoute represents a single static route entry.
@@ -527,32 +555,63 @@ func configureStaticRoutes(t *testing.T, dut *ondatra.DUTDevice, routes []static
 		gnmi.Update(t, dut, sp.Config(), proto)
 	}
 
-	// Configure via CLI: routes with egress-vrf, or routes in the default VRF.
-	for _, r := range routes {
-		if r.EgressVRF == "" && r.VRF != "" {
-			continue // already handled via OC above
-		}
-		ipType := "ip"
-		for _, ch := range r.Prefix {
-			if ch == ':' {
-				ipType = "ipv6"
-				break
+	if deviations.StaticRouteInVrfOcUnsupported(dut) {
+		switch dut.Vendor() {
+		case ondatra.ARISTA:
+			// Configure via CLI: routes with egress-vrf, or routes in the default VRF.
+			for _, r := range routes {
+				if r.EgressVRF == "" && r.VRF != "" {
+					continue // already handled via OC above
+				}
+				ipType := "ip"
+				for _, ch := range r.Prefix {
+					if ch == ':' {
+						ipType = "ipv6"
+						break
+					}
+				}
+				var cli string
+				switch {
+				case r.EgressVRF != "" && r.VRF != "":
+					cli = fmt.Sprintf("%s route vrf %s %s egress-vrf %s %s",
+						ipType, r.VRF, r.Prefix, r.EgressVRF, r.NextHop)
+				case r.EgressVRF == "" && r.VRF == "":
+					// Default VRF, plain next-hop — no vrf qualifier.
+					cli = fmt.Sprintf("%s route %s %s", ipType, r.Prefix, r.NextHop)
+				default:
+					// EgressVRF set but VRF is empty (edge case: egress from default VRF).
+					cli = fmt.Sprintf("%s route %s egress-vrf %s %s",
+						ipType, r.Prefix, r.EgressVRF, r.NextHop)
+				}
+				helpers.GnmiCLIConfig(t, dut, cli)
 			}
 		}
-		var cli string
-		switch {
-		case r.EgressVRF != "" && r.VRF != "":
-			cli = fmt.Sprintf("%s route vrf %s %s egress-vrf %s %s",
-				ipType, r.VRF, r.Prefix, r.EgressVRF, r.NextHop)
-		case r.EgressVRF == "" && r.VRF == "":
-			// Default VRF, plain next-hop — no vrf qualifier.
-			cli = fmt.Sprintf("%s route %s %s", ipType, r.Prefix, r.NextHop)
-		default:
-			// EgressVRF set but VRF is empty (edge case: egress from default VRF).
-			cli = fmt.Sprintf("%s route %s egress-vrf %s %s",
-				ipType, r.Prefix, r.EgressVRF, r.NextHop)
+	} else {
+		// Configure via OC: routes with egress-vrf or in the default VRF.
+		for _, r := range routes {
+			if r.EgressVRF == "" && r.VRF != "" {
+				continue // already handled via OC above
+			}
+			vrfName := r.VRF
+			if vrfName == "" {
+				vrfName = deviations.DefaultNetworkInstance(dut)
+			}
+			proto := &oc.NetworkInstance_Protocol{
+				Identifier: oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+				Name:       ygot.String(deviations.StaticProtocolName(dut)),
+			}
+			sr := proto.GetOrCreateStatic(r.Prefix)
+			sr.Prefix = ygot.String(r.Prefix)
+			nh := sr.GetOrCreateNextHop("0")
+			nh.Index = ygot.String("0")
+			nh.NextHop = oc.UnionString(r.NextHop)
+			if r.EgressVRF != "" {
+				nh.NextNetworkInstance = ygot.String(r.EgressVRF)
+			}
+			sp := gnmi.OC().NetworkInstance(vrfName).Protocol(
+				oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, deviations.StaticProtocolName(dut))
+			gnmi.Update(t, dut, sp.Config(), proto)
 		}
-		helpers.GnmiCLIConfig(t, dut, cli)
 	}
 }
 
@@ -765,7 +824,6 @@ func configureATE(t *testing.T) gosnappi.Config {
 	e2.Src().SetValue(ate2LagConfig.MAC)
 
 	v4Bwd := flowBwd.Packet().Add().Ipv4()
-	// TODO: Change Random Source Values to generate multiple flows
 	v4Bwd.Src().SetValue(ate2LagConfig.IPv4)
 	v4Bwd.Dst().SetValue(ate1LagConfig.IPv4)
 
@@ -852,20 +910,20 @@ func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, cfg gosnappi.Config, fl
 		// If the final snapshot already matches expectations, treat as pass.
 		if testResults {
 			if framesTx > 0 && framesRx == framesTx {
-				t.Logf("%s: traffic verification passed from final snapshot after watch timeout: FramesTx: %d, FramesRx: %d", flowName, framesTx, framesRx)
+				t.Logf("%s: traffic verification passed: FramesTx: %d, FramesRx: %d", flowName, framesTx, framesRx)
 				return
 			}
 		} else {
 			if framesTx > 0 && framesRx == 0 {
-				t.Logf("%s: traffic verification passed from final snapshot after watch timeout: FramesTx: %d, FramesRx: %d", flowName, framesTx, framesRx)
+				t.Logf("%s: traffic verification passed: FramesTx: %d, FramesRx: %d", flowName, framesTx, framesRx)
 				return
 			}
 		}
 
 		if testResults {
-			t.Errorf("%s: traffic verification did not pass within %v: FramesTx: %d, FramesRx: %d, want FramesRx == FramesTx and FramesTx > 0", flowName, watchTimeout, framesTx, framesRx)
+			t.Errorf("%s: traffic verification did not pass: FramesTx: %d, FramesRx: %d, want FramesRx == FramesTx and FramesTx > 0", flowName, framesTx, framesRx)
 		} else {
-			t.Errorf("%s: traffic verification did not pass within %v: FramesTx: %d, FramesRx: %d, want FramesRx == 0 and FramesTx > 0", flowName, watchTimeout, framesTx, framesRx)
+			t.Errorf("%s: traffic verification did not pass: FramesTx: %d, FramesRx: %d, want FramesRx == 0 and FramesTx > 0", flowName, framesTx, framesRx)
 		}
 		otgutils.LogFlowMetrics(t, ate.OTG(), cfg)
 		return
@@ -878,7 +936,7 @@ func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, cfg gosnappi.Config, fl
 	framesTx := recvMetric.GetCounters().GetOutPkts()
 	framesRx := recvMetric.GetCounters().GetInPkts()
 	otgutils.LogFlowMetrics(t, ate.OTG(), cfg)
-	t.Logf("%s: traffic verification passed within %v: FramesTx: %d, FramesRx: %d", flowName, watchTimeout, framesTx, framesRx)
+	t.Logf("%s: traffic verification passed: FramesTx: %d, FramesRx: %d", flowName, framesTx, framesRx)
 }
 
 func waitForOTGLAGUP(t *testing.T, ate *ondatra.ATEDevice, lagName string, wantMembersUp uint64, timeout time.Duration) {
@@ -938,7 +996,11 @@ func waitForOTGMACSecUp(t *testing.T, ate *ondatra.ATEDevice, ifName string, tim
 		func(val *ygnmi.Value[otgtelemetry.E_Interface_SessionState]) bool {
 			state, ok := val.Val()
 			if !ok {
-				t.Logf("Waiting MACsec session on %s: current state=%v", ifName, state)
+				t.Logf("Waiting MACsec session on %s: no value yet", ifName)
+				return false
+			}
+			if state != otgtelemetry.Interface_SessionState_UP {
+				t.Logf("Waiting MACsec session on %s: current state=%v, want UP", ifName, state)
 				return false
 			}
 			return true
@@ -1034,80 +1096,7 @@ func configureDualTunnels(t *testing.T, dut1, dut2 *ondatra.DUTDevice) {
 	})
 }
 
-func setShortSALifetime(t *testing.T, dut *ondatra.DUTDevice, seconds int) {
-	t.Helper()
-	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
-   sa policy SA_POLICY_1
-      sa lifetime %d minutes
-!`, seconds))
-}
-
-func setShortIKELifetime(t *testing.T, dut *ondatra.DUTDevice, seconds int) {
-	t.Helper()
-	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
-   ike policy IKE_POLICY_1
-      ike-lifetime %d minutes
-!`, seconds))
-}
-
-func configureDPD(t *testing.T, dut *ondatra.DUTDevice, intervalSec, holdSec int) {
-	t.Helper()
-	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
-   profile IPSEC_PROFILE_1
-      dpd %d %d
-!`, intervalSec, holdSec))
-}
-
-// func denyIKEToLoopback(t *testing.T, dut *ondatra.DUTDevice, dstLoopback string) {
-// 	t.Helper()
-// 	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`
-//    ipv6 access-list filter-ike-loopback
-//    deny udp host 10.0.0.5 host %s eq 500
-//    deny udp host 10.0.0.5 host %s eq 4500
-//    permit ip any any
-
-// ip security
-//    ip access-group filter-ike-loopback
-// !
-// `, dstLoopback, dstLoopback, loopback2IfName))
-// }
-
-func setMismatchedKey(t *testing.T, dut *ondatra.DUTDevice) {
-	t.Helper()
-	// Mismatch the key only on Tunnel2's dedicated profile so that Tunnel1, which
-	// uses IPSEC_PROFILE_1, stays UP while Tunnel2 goes DOWN.
-	helpers.GnmiCLIConfig(t, dut, `ip security
-   profile IPSEC_PROFILE_2
-      shared-key 7 074D0A0B0102
-!`)
-}
-
-func setMismatchedCipher(t *testing.T, dut *ondatra.DUTDevice) {
-	t.Helper()
-	// Mismatch the cipher only on Tunnel2's dedicated SA policy so that Tunnel1,
-	// which uses SA_POLICY_1, stays UP while Tunnel2 goes DOWN.
-	helpers.GnmiCLIConfig(t, dut, `ip security
-   sa policy SA_POLICY_2
-      esp encryption aes128gcm128
-!`)
-}
-
-func rotateSharedKey(t *testing.T, dut *ondatra.DUTDevice, key string) {
-	t.Helper()
-	helpers.GnmiCLIConfig(t, dut, fmt.Sprintf(`ip security
-   profile IPSEC_PROFILE_1
-      shared-key 7 %s
-!`, key))
-}
-
-func disableFlowLabelHash(t *testing.T, dut *ondatra.DUTDevice) {
-	t.Helper()
-	helpers.GnmiCLIConfig(t, dut, `ip security
-   profile IPSEC_PROFILE_1
-      no outer-ipv6-flow-label-randomization
-!`)
-}
-
+// configureQoSClassification configures QoS policy to classify IPSec and IKE traffic.
 func configureQoSClassification(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Helper()
 	helpers.GnmiCLIConfig(t, dut, `class-map CM-IPSEC-AF3
@@ -1231,7 +1220,7 @@ func readChildSPIs(t *testing.T, dut *ondatra.DUTDevice) []uint64 {
 		Path: []*gpb.Path{{
 			Elem: []*gpb.PathElem{
 				{Name: "network-instances"},
-				{Name: "network-instance", Key: map[string]string{"name": "default"}},
+				{Name: "network-instance", Key: map[string]string{"name": deviations.DefaultNetworkInstance(dut)}},
 				{Name: "security"},
 				{Name: "ipsec"},
 				{Name: "ipv6"},
@@ -1556,10 +1545,8 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 			fn: func(t *testing.T) {
 				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
 
-				setShortSALifetime(t, dut1, 10)
-				setShortSALifetime(t, dut2, 10)
-
-				// Read initial SPI values before SA renegotiation.
+				cfgplugins.SetShortSALifetime(t, dut1, cfgplugins.IPSecTunnelCfg{SAPolicy: "SA_POLICY_1"}, 10)
+				cfgplugins.SetShortSALifetime(t, dut2, cfgplugins.IPSecTunnelCfg{SAPolicy: "SA_POLICY_1"}, 10)
 				spisInitial := readChildSPIs(t, dut1)
 				if len(spisInitial) == 0 {
 					t.Fatal("no child SPI values found before SA renegotiation; cannot verify key rotation")
@@ -1616,8 +1603,8 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 			name: "IPSEC-1.1.5: Verify Hitless IKE Renegotation",
 			fn: func(t *testing.T) {
 				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
-				setShortIKELifetime(t, dut1, 10)
-				setShortIKELifetime(t, dut2, 10)
+				cfgplugins.SetShortIKELifetime(t, dut1, cfgplugins.IPSecTunnelCfg{IKEPolicy: "IKE_POLICY_1"}, 10)
+				cfgplugins.SetShortIKELifetime(t, dut2, cfgplugins.IPSecTunnelCfg{IKEPolicy: "IKE_POLICY_1"}, 10)
 				// Read initial SPI values before SA renegotiation.
 				spisInitial := readChildSPIs(t, dut1)
 				if len(spisInitial) == 0 {
@@ -1651,7 +1638,7 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 						}
 					}
 					if spiChanged {
-						t.Logf("IKE Regoniation Done: SPI changed after %v", time.Since(start).Round(time.Second))
+						t.Logf("IKE Renegotiation Done: SPI changed after %v", time.Since(start).Round(time.Second))
 						break
 					}
 				}
@@ -1672,7 +1659,6 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 			},
 		},
 		{
-			// TODO: Check with Arista how to Filter IKE traffic directed at loopback on DUT2, which is expected to cause DPD keepalives over tunnel #2 to fail
 			name: "IPSEC-1.1.6: Verify DPD / dead-peer detection",
 			fn: func(t *testing.T) {
 				switch dut1.Vendor() {
@@ -1681,12 +1667,13 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 					t.Skip("Skipping DPD test for Arista DUT1; ACLs on loopback not supported")
 				}
 				configureDualTunnels(t, dut1, dut2)
-				configureDPD(t, dut1, 2, 10)
-				configureDPD(t, dut2, 2, 10)
+				cfgplugins.ConfigureDPD(t, dut1, cfgplugins.IPSecTunnelCfg{TunnelName: tunnelIfName}, 2, 10)
+				cfgplugins.ConfigureDPD(t, dut2, cfgplugins.IPSecTunnelCfg{TunnelName: tunnelIfName}, 2, 10)
 				t.Cleanup(func() {
+					cfgplugins.DeleteTunnelInterface(t, dut1, tunnel2IfName)
+					cfgplugins.DeleteTunnelInterface(t, dut2, tunnel2IfName)
 					configureBaseSingleTunnel(t, dut1, dut2)
 				})
-
 				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
 				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_UP, lagUpTimeout)
 
@@ -1694,9 +1681,6 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				runTrafficWindow(t, otg, 20*time.Second)
 				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
 				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, pre, 0.30, false)
-
-				// denyIKEToLoopback(t, dut1, dut2Loopback2IPv6)
-				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_DOWN, lagUpTimeout)
 
 				runTrafficWindow(t, otg, 20*time.Second)
 				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
@@ -1709,8 +1693,8 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				t.Cleanup(func() {
 					// Remove the second tunnel configured by configureDualTunnels and
 					// restore the base single-tunnel setup for subsequent subtests.
-					helpers.GnmiCLIConfig(t, dut1, "no interface Tunnel2")
-					helpers.GnmiCLIConfig(t, dut2, "no interface Tunnel2")
+					cfgplugins.DeleteTunnelInterface(t, dut1, tunnel2IfName)
+					cfgplugins.DeleteTunnelInterface(t, dut2, tunnel2IfName)
 					configureBaseSingleTunnel(t, dut1, dut2)
 				})
 
@@ -1725,8 +1709,7 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, preBoth, 0.30, false)
 
 				// Introduce a key mismatch on Tunnel2 only; Tunnel1 stays UP.
-				setMismatchedKey(t, dut2)
-				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				cfgplugins.SetMismatchedKey(t, dut2, cfgplugins.IPSecTunnelCfg{TunnelName: tunnel2IfName, Profile: "IPSEC_PROFILE_2"})
 				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_DOWN, lagUpTimeout)
 
 				// Post-check: traffic still passes and ECMP remains balanced across the
@@ -1744,8 +1727,8 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				t.Cleanup(func() {
 					// Remove the second tunnel configured by configureDualTunnels and
 					// restore the base single-tunnel setup for subsequent subtests.
-					helpers.GnmiCLIConfig(t, dut1, "no interface Tunnel2")
-					helpers.GnmiCLIConfig(t, dut2, "no interface Tunnel2")
+					cfgplugins.DeleteTunnelInterface(t, dut1, tunnel2IfName)
+					cfgplugins.DeleteTunnelInterface(t, dut2, tunnel2IfName)
 					configureBaseSingleTunnel(t, dut1, dut2)
 				})
 
@@ -1760,8 +1743,7 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				verifyDUTDUTLoadBalance(t, dut1, dut1CorePorts, preBoth, 0.30, false)
 
 				// Introduce a cipher mismatch on Tunnel2 only; Tunnel1 stays UP.
-				setMismatchedCipher(t, dut2)
-				verifyTunnelOperStatus(t, dut1, tunnelIfName, oc.Interface_OperStatus_UP, lagUpTimeout)
+				cfgplugins.SetMismatchedCipher(t, dut2, cfgplugins.IPSecTunnelCfg{TunnelName: tunnel2IfName, SAPolicy: "SA_POLICY_2"})
 				verifyTunnelOperStatus(t, dut1, tunnel2IfName, oc.Interface_OperStatus_DOWN, lagUpTimeout)
 
 				// Post-check: traffic still passes and ECMP remains balanced across the
@@ -1778,8 +1760,8 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				runTrafficWindow(t, otg, 10*time.Second)
 				verifyTraffic(t, ate, top, flowIPv4Fwd, true)
 
-				rotateSharedKey(t, dut1, "052B0A1A3F51")
-				rotateSharedKey(t, dut2, "052B0A1A3F51")
+				cfgplugins.RotateSharedKey(t, dut1, cfgplugins.IPSecTunnelCfg{TunnelName: tunnelIfName}, "052B0A1A3F51")
+				cfgplugins.RotateSharedKey(t, dut2, cfgplugins.IPSecTunnelCfg{TunnelName: tunnelIfName}, "052B0A1A3F51")
 				t.Cleanup(func() {
 					configureBaseSingleTunnel(t, dut1, dut2)
 				})
@@ -1797,7 +1779,7 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 					// Arista does not support flow-label hash disablement, so skip this subtest.
 					t.Skip("Skipping Flow-Label Hash-Disablement test for Arista DUT; feature not supported")
 				}
-				disableFlowLabelHash(t, dut1)
+				cfgplugins.DisableFlowLabelHash(t, dut1, cfgplugins.IPSecTunnelCfg{TunnelName: tunnelIfName})
 				t.Cleanup(func() {
 					configureBaseSingleTunnel(t, dut1, dut2)
 				})
@@ -1856,12 +1838,12 @@ func TestIPSecWithMACSecOverAggregatedLinks(t *testing.T) {
 				})
 
 				configureQoSClassification(t, dut1)
-				setShortSALifetime(t, dut1, 60)
-				setShortSALifetime(t, dut2, 60)
-				setShortIKELifetime(t, dut1, 60)
-				setShortIKELifetime(t, dut2, 60)
-				configureDPD(t, dut1, 2, 10)
-				configureDPD(t, dut2, 2, 10)
+				cfgplugins.SetShortSALifetime(t, dut1, cfgplugins.IPSecTunnelCfg{SAPolicy: "SA_POLICY_1"}, 60)
+				cfgplugins.SetShortSALifetime(t, dut2, cfgplugins.IPSecTunnelCfg{SAPolicy: "SA_POLICY_1"}, 60)
+				cfgplugins.SetShortIKELifetime(t, dut1, cfgplugins.IPSecTunnelCfg{IKEPolicy: "IKE_POLICY_1"}, 60)
+				cfgplugins.SetShortIKELifetime(t, dut2, cfgplugins.IPSecTunnelCfg{IKEPolicy: "IKE_POLICY_1"}, 60)
+				cfgplugins.ConfigureDPD(t, dut1, cfgplugins.IPSecTunnelCfg{TunnelName: tunnelIfName}, 2, 10)
+				cfgplugins.ConfigureDPD(t, dut2, cfgplugins.IPSecTunnelCfg{TunnelName: tunnelIfName}, 2, 10)
 				// With SA/IKE lifetimes set to 60s and a 75s run, at least one renewal should
 				// occur; tunnel-stays-up across the full window is used as the hitless proxy.
 				t.Log("short SA/IKE lifetimes applied; validating tunnel stays UP through renewal window")

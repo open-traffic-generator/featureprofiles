@@ -2202,3 +2202,17 @@ func LACPInterfaceMemberStateInterfaceUnsupported(dut *ondatra.DUTDevice) bool {
 func RequireTransportSecurity(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetRequireTransportSecurity()
 }
+
+// IpsecOcUnsupported returns if device does not support OC configuration for IPSec.
+func IpsecOcUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetIpsecOcUnsupported()
+}
+
+//StaticRouteInVrfOcUnsupported returns true if device does not support OC configuration for static route in VRF.
+func StaticRouteInVrfOcUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetStaticRouteInVrfOcUnsupported()
+}
+
+func IpRoutingInVrfOcUnsupported(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetIpRoutingInVrfOcUnsupported()
+}

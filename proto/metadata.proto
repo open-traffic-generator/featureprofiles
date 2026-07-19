@@ -47,6 +47,7 @@ message Metadata {
     TESTBED_DUT_2LINKS = 15;
     TESTBED_DUT_ATE_34LINKS = 16;
     TESTBED_DUT_ATE_8LINKS_LAG = 17;
+    TESTBED_ATE_DUT_4LINKS_DUT_ATE = 18;
   }
   // Testbed on which the test is intended to run.
   Testbed testbed = 4;
@@ -1345,6 +1346,15 @@ message Metadata {
     // Device requires transport-security to be enabled on gRPC server.
     // Juniper: https://partnerissuetracker.corp.google.com/issues/515276334
     bool require_transport_security = 427;
+
+    // https://partnerissuetracker.corp.google.com/issues/536260803
+    bool ipsec_oc_unsupported = 428;
+
+    // https://partnerissuetracker.corp.google.com/issues/536063386
+    bool static_route_in_vrf_oc_unsupported = 429;
+
+    // https://partnerissuetracker.corp.google.com/issues/536063387
+    bool ip_routing_in_vrf_oc_unsupported = 430;
 
     // Reserved field numbers and identifiers.
     reserved 84, 9, 28, 20, 38, 43, 90, 97, 55, 89, 19, 36, 35, 40, 113, 131, 141, 173, 234, 254, 231, 300, 241, 49;
