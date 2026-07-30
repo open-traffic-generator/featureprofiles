@@ -15,14 +15,16 @@
 package passwordconsolelogin_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/openconfig/ondatra/gnmi"
-
 	"github.com/openconfig/featureprofiles/internal/fptest"
+	"github.com/openconfig/featureprofiles/internal/helpers"
 	"github.com/openconfig/featureprofiles/internal/security/credz"
 	"github.com/openconfig/ondatra"
+	"github.com/openconfig/ondatra/gnmi"
 )
 
 const (
@@ -39,8 +41,43 @@ func TestMain(m *testing.M) {
 }
 
 func TestCredentialz(t *testing.T) {
+	passwordVersion := fmt.Sprintf("%s-%d", passwordVersion, time.Now().Unix())
+
 	dut := ondatra.DUT(t, "dut")
-	target := credz.GetDutTarget(t, dut)
+
+	// Add any vendor specific cli to enable the ssh login using password
+	switch dut.Vendor() {
+	case ondatra.ARISTA:
+		t.Logf("Arista vendor, adding CLI config for ssh authentication set to public-key")
+		cliConfig := `
+				management ssh
+			  	 authentication protocol password
+				 `
+		t.Cleanup(func() {
+			t.Logf("Arista vendor, performing SSH cleanup for password authentication")
+			cliConfig := `
+				management ssh
+					no authentication protocol password
+				`
+			helpers.GnmiCLIConfig(t, dut, cliConfig)
+		})
+		helpers.GnmiCLIConfig(t, dut, cliConfig)
+	case ondatra.JUNIPER:
+		t.Logf("Juniper vendor, adding CLI config to enable ssh services and allow root login")
+		cliConfig := `
+			system {
+					services {
+							ssh {
+									root-login allow;
+							}
+					}
+					authentication-order password;
+			}
+			`
+		helpers.GnmiCLIConfig(t, dut, cliConfig)
+	default:
+		t.Logf("Vendor %s, does not need CLI configuration in this test", dut.Vendor())
+	}
 
 	// Setup test user and password.
 	credz.SetupUser(t, dut, username)
@@ -77,7 +114,9 @@ func TestCredentialz(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Verify ssh succeeds/fails based on expected result.
-			client, err := credz.SSHWithPassword(target, tc.loginUser, tc.loginPassword)
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			client, err := credz.SSHWithPassword(ctx, dut, tc.loginUser, tc.loginPassword)
 			if tc.expectFail {
 				if err == nil {
 					t.Fatalf("Dialing ssh succeeded, but we expected to fail.")
@@ -96,9 +135,20 @@ func TestCredentialz(t *testing.T) {
 				t.Fatalf("Telemetry reports password version is not correct\n\tgot: %s\n\twant: %s", got, want)
 			}
 			gotPasswordCreatedOn := userState.GetPasswordCreatedOn()
-			if got, want := gotPasswordCreatedOn, uint64(passwordCreatedOn); got != want {
+			wantPasswordCreatedOn := uint64(passwordCreatedOn)
+			switch dut.Vendor() {
+			case ondatra.NOKIA:
+				wantPasswordCreatedOn *= 1e9
+			}
+			if got, want := gotPasswordCreatedOn, wantPasswordCreatedOn; got != want {
 				t.Fatalf("Telemetry reports password created on is not correct\n\tgot: %d\n\twant: %d", got, want)
 			}
 		})
 	}
+
+	t.Cleanup(func() {
+		// Cleanup user password after test.
+		credz.RotateUserPassword(t, dut, username, "", "", 0)
+		credz.SSHCleanup(t, dut)
+	})
 }
