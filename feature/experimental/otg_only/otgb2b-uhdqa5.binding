@@ -25,11 +25,11 @@ ates {
   # from its topology ID to the actual port name on the device.
   ports {
     id: "port1"
-    name: "uhd://tf2-qa5.lbj.is.keysight.com:7531;9+10.36.71.78:50079"
+    name: "uhd://tf2-qa5.lbj.is.keysight.com:7531;9+10.36.71.73:50079"
   }
   ports {
     id: "port2"
-    name: "uhd://tf2-qa5.lbj.is.keysight.com:7531;10+10.36.71.78:50080"
+    name: "uhd://tf2-qa5.lbj.is.keysight.com:7531;10+10.36.71.73:50080"
   }
 }
 
