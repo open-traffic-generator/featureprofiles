@@ -1,0 +1,79 @@
+{
+  "_comment": [
+    "Rated per-port protocol-session and flow capacity, from the Athena performance",
+    "matrix ('Per Resource Group (#ports * speedMode)').",
+    "",
+    "This file overrides the matrix compiled into the tests. It is optional: delete",
+    "it and both tests fall back to their built-in table, which holds these same",
+    "numbers. It is picked up automatically from this directory by bgpv4/ and",
+    "bgpv6/; -scale_limits_file=<path> names a different one.",
+    "",
+    "Every run logs which table it used and every row this file changed, so the log",
+    "always records where an enforced limit came from. A file that exists but does",
+    "not parse is a fatal error rather than a silent fall back to the built-ins.",
+    "",
+    "Fields are optional per row: omit one and the built-in value is kept. Note that",
+    "0 is NOT 'omitted' -- it means 'not rated', which disables the check for that",
+    "figure and lets -scale_sessions / -scale_max_flows through unchecked.",
+    "",
+    "'aresone' is a whole-resource-group total, split evenly over however many ports",
+    "the group is broken out into: 1x800G 36556, 2x400G 18278, 4x200G 9139,",
+    "8x100G 4570, 16x50G 2285. Every other row is a flat per-port figure.",
+    "",
+    "OPEN QUESTION on novus_normal: the performance matrix screenshot reads",
+    "35686 / 31334. The 36556 / 26982 below was an explicit instruction, to rate the",
+    "Novus 10G card the same as an unsplit AresONE group. Change the two numbers",
+    "here to follow the published matrix instead -- no code change needed."
+  ],
+
+  "rows": {
+    "aresone": {
+      "bgpv4": 36556,
+      "bgpv6": 26982,
+      "max_flows": 256
+    },
+    "novus_normal": {
+      "bgpv4": 36556,
+      "bgpv6": 26982,
+      "max_flows": 512
+    },
+    "novus_aggregated": {
+      "bgpv4": 60928,
+      "bgpv6": 60928,
+      "max_flows": 512
+    },
+    "novus_1ge32s": {
+      "bgpv4": 17843,
+      "bgpv6": 15667,
+      "max_flows": 512
+    },
+    "sert_100g": {
+      "bgpv4": 4461,
+      "bgpv6": 3373,
+      "max_flows": 0
+    }
+  },
+
+  "_cards_comment": [
+    "'cards' rates cards the built-in matching rules do not cover. Each entry is:",
+    "",
+    "  {",
+    "    \"match\":     \"NOVUS-R100GE8Q28\",   case-insensitive substring of the card",
+    "                                        type as 'show topology' reports it;",
+    "                                        the first match wins over every",
+    "                                        built-in rule",
+    "    \"bgpv4\":     1000,",
+    "    \"bgpv6\":     800,",
+    "    \"max_flows\": 64,",
+    "    \"per_group\": false,                 true = bgpv4/bgpv6 are a whole-group",
+    "                                        total to split over the group's port",
+    "                                        count, as 'aresone' is rated",
+    "    \"source\":    \"why this rating\"      quoted in the run log",
+    "  }",
+    "",
+    "A real case waiting on numbers: NOVUS-R100GE8Q28+FAN+10G+25G+40G+50G, card 2 of",
+    "xgshs-606488, currently logs as unrated with no limit enforced."
+  ],
+
+  "cards": []
+}
