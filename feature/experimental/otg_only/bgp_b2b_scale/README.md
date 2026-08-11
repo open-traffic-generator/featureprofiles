@@ -5,11 +5,6 @@ ATE ports wired back-to-back (no DUT), verify session state and route exchange o
 gNMI telemetry, and run a capped set of data-plane flows over the advertised routes as a
 sanity check.
 
-They are a port of the Athena scale tests `bgpv4_b2b_multi_session_test.go` /
-`bgpv6_b2b_multi_session_test.go` into the featureprofiles + ondatra framework. They use
-**only** ondatra, gosnappi and OTG gNMI telemetry — no `keysight/athena/tests/pkg/*`
-packages — so they run the same way as the reference b2b test in
-[../bgp_b2b/otgb2b_bgp_test.go](../bgp_b2b/otgb2b_bgp_test.go).
 
 ```
 bgp_b2b_scale/
@@ -19,18 +14,29 @@ bgp_b2b_scale/
 │   └── bgpv4_b2b_scale_test.go    TestBGPv4B2BScale, package otg_b2b_bgp_scale
 └── bgpv6/
     └── bgpv6_b2b_scale_test.go    TestBGPv6B2BScale, package otg_b2b_bgpv6_scale
+
+../scale/              package scale — the shared library both tests import
+├── chassis.go         chassis / card / resource-group discovery, port + chassis health
+├── limits.go          the rating matrix, card_limits.json, the limit warnings
+├── ports.go           ports-only seed config, port reboot
+├── timing.go          API call timing and the per-iteration table
+├── addressing.go      per-session address, MAC and VLAN arithmetic
+├── bgpconfig.go       one BGP device / one flow, per address family
+├── bgptelemetry.go    session-state and peer-counter fetch + aggregation
+└── traffic.go         flow counter fetch, the "all flows stopped" wait
 ```
 
-Each test is **one self-contained file** and is meant to stay that way — it can be handed
-out on its own, and it runs with nothing but a binding and a testbed. That is why the two
-files duplicate roughly a thousand lines (chassis discovery, card limits, API timing).
-The duplicated region runs from the `// OTG API call timing` banner to EOF plus the
-`discoverChassis`..`logCardHealth` block, and the two copies are kept **byte-identical**:
+**The split between the two.** A test keeps its outline and its assertions; the library
+takes the mechanics. Reading either test file alone still tells you which ports it uses,
+how many sessions and routes it asks for, what goes on each device, what it polls and what
+it treats as a pass. What it no longer contains is *how* any of that is done. The library
+decides nothing: the limit checks warn and let the run proceed at exactly the scale asked
+for, and the telemetry helpers fetch and aggregate but never judge.
 
-```sh
-diff <(sed -n '/^\/\/ OTG API call timing$/,$p' bgpv4/bgpv4_b2b_scale_test.go) \
-     <(sed -n '/^\/\/ OTG API call timing$/,$p' bgpv6/bgpv6_b2b_scale_test.go)
-```
+The tests were previously one self-contained file each, at the cost of ~1900 duplicated
+lines. They now depend on the featureprofiles module and can no longer be handed out as a
+lone `.go` file. Everything about running them is unchanged, including the single-file
+`go test <file>.go` form.
 
 Unless stated otherwise, everything below applies to both. The v4/v6 differences are
 addressing (`/24` + `/32` routes vs `/64` + `/128`), and that a v6 peer cannot use its
@@ -207,16 +213,18 @@ Debug:
 | `-scale_wildcard_telemetry` | `true` | Fetch peer telemetry with one wildcard `BgpPeerAny()` query per poll. Set `false` to force per-peer queries (much slower at scale, useful to cross-check the wildcard) |
 | `-scale_dump_config` | `false` | Log the pushed OTG config as JSON |
 
-Chassis / card discovery:
+Chassis / card discovery. These are defined by `../scale`, not by the tests — along with
+`-scale_wildcard_telemetry` above, they are the flags describing how to reach the rig and
+how to read telemetry. Every other flag on this page belongs to the test, which is what
+decides the scale and shape of a run.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `-scale_chassis_check` | `true` | Discover the Ixia card behind the bound ports and warn when the requested scale exceeds its rated session / flow limits |
+| `-scale_chassis_check` | `false` | Discover the Ixia card behind the bound ports and warn when the requested scale exceeds its rated session / flow limits |
 | `-scale_chassis_user` | `admin` | IxOS chassis username |
 | `-scale_chassis_pass` | `admin` | IxOS chassis password |
 | `-scale_chassis_timeout` | `30s` | Per-request timeout for the chassis SSH / REST calls |
 | `-scale_limits_file` | *(auto)* | Path to a `card_limits.json` overriding the built-in rating matrix. Default: `card_limits.json` next to the test, then in its parent directory |
-| `-scale_port_reboot` | `false` | Reboot the ports under test over the IxOS REST API once at the start, before any config is pushed. See [Port reboot](#port-reboot) |
 | `-scale_port_reboot_timeout` | `10m` | Max wait for the ports to come back after a reboot |
 
 ## Port reboot
