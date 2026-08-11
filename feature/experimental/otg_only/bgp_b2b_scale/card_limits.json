@@ -36,22 +36,7 @@
       "bgpv4": 36556,
       "bgpv6": 26982,
       "max_flows": 512
-    },
-    "novus_aggregated": {
-      "bgpv4": 60928,
-      "bgpv6": 60928,
-      "max_flows": 512
-    },
-    "novus_1ge32s": {
-      "bgpv4": 17843,
-      "bgpv6": 15667,
-      "max_flows": 512
-    },
-    "sert_100g": {
-      "bgpv4": 4461,
-      "bgpv6": 3373,
-      "max_flows": 0
-    }
+    }  
   },
 
   "_cards_comment": [
