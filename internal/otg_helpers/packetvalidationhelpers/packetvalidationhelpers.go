@@ -171,6 +171,9 @@ type TCPLayer struct {
 type UDPLayer struct {
 	SrcPort uint32
 	DstPort uint32
+	// SkipSrcPortCheck skips source-port validation, e.g. when the DUT derives
+	// the outer UDP source port from a flow hash and it is not deterministic.
+	SkipSrcPortCheck bool
 }
 
 // BGPLayer holds the BGP Layer parameters.
@@ -496,7 +499,7 @@ func validateUDPHeader(t *testing.T, packetSource *gopacket.PacketSource, packet
 			if uint32(udp.DstPort) != packetVal.UDPLayer.DstPort {
 				return fmt.Errorf("UDP Dst Port is not set properly. Expected: %d, Actual: %d", packetVal.UDPLayer.DstPort, udp.DstPort)
 			}
-			if uint32(udp.SrcPort) != packetVal.UDPLayer.SrcPort {
+			if !packetVal.UDPLayer.SkipSrcPortCheck && uint32(udp.SrcPort) != packetVal.UDPLayer.SrcPort {
 				return fmt.Errorf("UDP Src Port is not set properly. Expected: %d, Actual: %d", packetVal.UDPLayer.SrcPort, udp.SrcPort)
 			}
 			// If validation is successful for one packet, we can return.
