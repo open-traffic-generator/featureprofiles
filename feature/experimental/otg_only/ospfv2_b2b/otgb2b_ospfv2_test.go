@@ -10,6 +10,7 @@ import (
 	"github.com/openconfig/featureprofiles/internal/otgutils"
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
+
 	//otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
 	otg "github.com/openconfig/ondatra/otg"
 	//	"github.com/openconfig/ygnmi/ygnmi"
@@ -34,19 +35,17 @@ type trafficEndpoints struct {
 
 var (
 	atePort1 = attrs.Attributes{
-		Name:       "atePort1",
-		MAC:        "02:00:01:01:01:01",
-		IPv4:       "192.0.2.1",
-		IPv4Len:    16,
-		RouteCount: 1,
+		Name:    "atePort1",
+		MAC:     "02:00:01:01:01:01",
+		IPv4:    "192.0.2.1",
+		IPv4Len: 16,
 	}
 
 	atePort2 = attrs.Attributes{
-		Name:       "atePort2",
-		MAC:        "02:00:02:01:01:01",
-		IPv4:       "192.0.3.1",
-		IPv4Len:    16,
-		RouteCount: 1,
+		Name:    "atePort2",
+		MAC:     "02:00:02:01:01:01",
+		IPv4:    "192.0.3.1",
+		IPv4Len: 16,
 	}
 )
 
@@ -105,7 +104,7 @@ func configureOtgOspfv2(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		Add().
 		SetAddress("10.10.10.1").
 		SetPrefix(24).
-		SetCount(atePort1.RouteCount).
+		SetCount(1).
 		SetStep(1)
 
 	// add protocol stacks for device d2
@@ -142,7 +141,7 @@ func configureOtgOspfv2(t *testing.T, otg *otg.OTG) gosnappi.Config {
 		Add().
 		SetAddress("20.20.20.1").
 		SetPrefix(24).
-		SetCount(atePort2.RouteCount).
+		SetCount(1).
 		SetStep(1)
 
 	// Set non-default route-origin
@@ -260,7 +259,7 @@ func verifyOtgOspfv2TelemetryCheckAllSessionsUp(
 		ospfv2 := d.Ospfv2()
 		state := gnmi.Get(t, otg, gnmi.OTG().Ospfv2Router(ospfv2.Name()).Counters().SessionsUp().State())
 		out += fmt.Sprintf("%15s %15d\n", ospfv2.Name(), state)
-		if (state == 1) {
+		if state == 1 {
 		}
 	}
 	out += fmt.Sprintf("%s\n", strings.Repeat("-", 40))
