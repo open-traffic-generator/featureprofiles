@@ -185,7 +185,7 @@ func testTraffic(t *testing.T, ate *ondatra.ATEDevice, c gosnappi.Config) {
 	if err != nil {
 		t.Fatalf("ERROR: Could not create temporary pcap file: %v\n", err)
 	}
-	// defer os.Remove(f.Name())
+	defer os.Remove(f.Name())
 
 	if _, err := f.Write(bytes); err != nil {
 		t.Fatalf("ERROR: Could not write bytes to pcap file: %v\n", err)
@@ -216,5 +216,20 @@ func TestOTGb2b(t *testing.T) {
 
 	t.Logf("Verify traffic")
 	testTraffic(t, ate, otgConfig)
+
+	t.Logf("Setting port1 down")
+	portStateAction := gosnappi.NewControlState()
+	portStateAction.Port().Link().SetPortNames([]string{"port1"}).SetState(gosnappi.StatePortLinkState.DOWN)
+	otg.SetControlState(t, portStateAction)
+
+	sleepTimer := 120
+	t.Logf("Sleeping for %d", sleepTimer)
+	time.Sleep(time.Duration(sleepTimer) * time.Second)
+
+	t.Logf("Starting second test")
+	otgConfig2 := configureOTG(t, otg)
+
+	t.Logf("Verify traffic")
+	testTraffic(t, ate, otgConfig2)
 
 }
