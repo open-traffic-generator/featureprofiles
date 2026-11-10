@@ -2535,3 +2535,10 @@ func ISISInterfaceAuthenticationContainerUnsupported(dut *ondatra.DUTDevice) boo
 func SkipGnoiPingRpcAuthzVerification(dut *ondatra.DUTDevice) bool {
 	return lookupDUTDeviations(dut).GetSkipGnoiPingRpcAuthzVerification()
 }
+
+// BgpInstallMapCLIRequired returns true if the device does not support BGP to BGP
+// table-connection for RIB to FIB install suppression and requires the CLI
+// "bgp route install-map" instead.
+func BgpInstallMapCLIRequired(dut *ondatra.DUTDevice) bool {
+	return lookupDUTDeviations(dut).GetBgpInstallMapCliRequired()
+}
